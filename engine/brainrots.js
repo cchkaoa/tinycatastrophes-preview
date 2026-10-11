@@ -77,19 +77,25 @@
   // ---------- Tralalero Tralala: a blue shark on three legs in sneakers ----------
   // body lofted from cross-sections (not a lathe): sec(u) gives half-width w, height above (ht) and below (hb) the centre
   // line at y; u runs from the tail stalk (0) to the snout tip (1). Superellipse rings (n = 2.2) keep it sleek, not round.
-  // opts.us: the rings' u values (default nU + 1 evenly spaced); opts.clip(u) -> {lo, hi}: y is clamped into that range
-  // (a flat cut, e.g. a mouth), and color(x, y, z, th, u, cut) learns whether the point was clamped
+  // opts.us: the rings' u values (default nU + 1 evenly spaced); opts.clip(u) -> {lo, hi, xr}: y is clamped into that range
+  // (a flat cut, e.g. a mouth; xr: the cut face's half-width), and color(x, y, z, th, u, cut) learns whether the point was
+  // clamped; opts.warp(u, x, y) -> [x, y] reshapes a ring after the cut. Normals are always those of the plain surface
   function loft(L, z0, sec, color, nU = 72, nV = 48, n = 2.2, opts = {}){
     const P = [], Cc = [], I = [], e = 2/n, sg = v => v < 0 ? -1 : 1;
     const us = opts.us || [...Array(nU + 1)].map((_, i) => i/nU); nU = us.length - 1;
+    const RAW = [];
     for (const u of us){ const s = sec(u), z = z0 + u*L, cl = opts.clip ? opts.clip(u) : null;
       for (let j = 0; j <= nV; j++){ const th = j/nV*Math.PI*2, sn = Math.sin(th), cs = Math.cos(th);
-        const x = s.w*sg(sn)*Math.pow(Math.abs(sn), e); let y = s.y + (cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e), cut = false;
-        if (cl){ if (cl.lo != null && y < cl.lo){ y = cl.lo; cut = true; } if (cl.hi != null && y > cl.hi){ y = cl.hi; cut = true; } }
+        let x = s.w*sg(sn)*Math.pow(Math.abs(sn), e), y = s.y + (cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e), cut = false;
+        RAW.push(x, y, z);
+        if (cl){ if (cl.lo != null && y < cl.lo){ y = cl.lo; cut = true; } if (cl.hi != null && y > cl.hi){ y = cl.hi; cut = true; }
+          if (cut && cl.xr != null) x = sg(x)*Math.min(Math.abs(x), cl.xr); }   // the cut face ends at the rim, never sticks out
+        if (opts.warp) [x, y] = opts.warp(u, x, y);
         P.push(x, y, z); const c = color(x, y, z, th, u, cut); Cc.push(c.r, c.g, c.b); } }
     for (let i = 0; i < nU; i++) for (let j = 0; j < nV; j++){ const a = i*(nV + 1) + j, b = a + nV + 1; I.push(a, b, a + 1, a + 1, b, b + 1); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
-    g.setIndex(I); g.computeVertexNormals();
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(RAW, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
+    g.setIndex(I); g.computeVertexNormals();                                  // shaded as the uncut surface...
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));      // ...shaped with the cuts
     const N = g.attributes.normal;   // close the seam: average the normals of the first and last column of every ring
     for (let i = 0; i <= nU; i++){ const a = i*(nV + 1), b = a + nV; _p.set(N.getX(a) + N.getX(b), N.getY(a) + N.getY(b), N.getZ(a) + N.getZ(b)).normalize();
       N.setXYZ(a, _p.x, _p.y, _p.z); N.setXYZ(b, _p.x, _p.y, _p.z); }
@@ -111,7 +117,7 @@
     // the mouth line: from the corners (UC, low on the sides behind the eye) forward and down to the chin (UF). The head is
     // cut flat along it: above is the head (its cut face is the palate), below is the lower jaw, hinged at the corners
     const UC = .76, UF = .93, EPS = .0015;
-    const cutY = u => { const q = sec(u), v = clamp((u - UC)/(UF - UC), 0, 1); return q.y - q.hb + (.06 + .5*Math.pow(1 - v, 1.2))*q.hb; };
+    const cutY = u => { const q = sec(u), v = clamp((u - UC)/(UF - UC), 0, 1); return q.y - q.hb + .72*Math.pow(1 - v, .75)*q.hb; };
     const rimX = u => { const q = sec(u), d = Math.min(1, Math.abs((cutY(u) - q.y)/q.hb)); return q.w*Math.pow(1 - Math.pow(d, 2.05), 1/2.05); };
     const inMouth = u => u > UC && u < UF;
     const tmp = new THREE.Color(), sp = E.mulberry32(9);
@@ -120,7 +126,7 @@
       tmp.copy(TOP).lerp(BLUE, smooth(.15, .9, a)).lerp(SIDE, smooth(1.1, 1.65, a)).lerp(BELLY, smooth(edge - .07, edge + .07, a));
       return tmp.clone().multiplyScalar(.97 + .06*sp()); };
     const US = [...Array(73)].map((_, i) => i/72).filter(u => Math.abs(u - UC) > .004).concat([UC - EPS, UC - EPS/3, UC + EPS]).sort((a, b) => a - b);
-    const lip = (x, y, z, th, u, cut) => cut ? tmp.copy(BELLY).multiplyScalar(.97 + .06*sp()).clone() : shade(x, y, z, th, u);   // cut faces: belly white, a clean lip edge
+    const lip = (x, y, z, th, u, cut) => cut && u < UC + EPS*1.5 ? CAV.clone().multiplyScalar(.45) : cut ? tmp.copy(BELLY).multiplyScalar(.97 + .06*sp()).clone() : shade(x, y, z, th, u);   // cut faces: belly white, a clean lip edge
     const bodyGeo = loft(L, Z0, u => { const q = sec(u); if (u <= 0 || u >= 1){ q.w = q.ht = q.hb = 0; } return q; },   // closed at both ends
       lip, 72, 48, 2.05, { us: US, clip: u => inMouth(u) ? { lo: cutY(u) } : null });
     const bm = new THREE.Mesh(bodyGeo, skin); bm.castShadow = bm.receiveShadow = true; body.add(bm);
@@ -140,9 +146,11 @@
     // mouth with a gum edge; capped at the hinge and the chin. Teeth: a U of triangles on each jaw, on the gum line
     const zAt = u => Z0 + u*L, hinge = [0, sec(UC).y - sec(UC).hb, zAt(UC)];   // hinged at the bottom: it opens forward, never off the chin
     const jaw = grp(body, ...hinge);
-    const JU = [UC + EPS*.5, UC + EPS*.75, ...[...Array(25)].map((_, i) => UC + EPS + (UF - UC - 2*EPS)*i/24), UF - EPS*.5];   // [cap, dark ring, skin...]
+    // it starts just behind the corners, tucked a hair inside the head (no seam line on the skin), its back dark (seen only open)
+    const JB = UC - EPS/3, JU = [UC - .007, UC - .0045, JB, ...[...Array(25)].map((_, i) => UC + EPS + (UF - UC - 2*EPS)*i/24), UF - EPS*.5];   // [cap, dark ring, skin...]
     const jawGeo = loft(L, Z0, u => { const q = sec(u); if (u === JU[0] || u === JU[JU.length - 1]){ q.y = (cutY(u) + q.y - q.hb)/2; q.w = q.ht = q.hb = 0; } return q; },
-      (x, y, z, th, u, cut) => u <= JU[1] ? CAV.clone().multiplyScalar(.6) : lip(x, y, z, th, u, cut), 0, 40, 2.05, { us: JU, clip: u => ({ hi: cutY(u) }) });
+      (x, y, z, th, u, cut) => u < JB ? CAV.clone().multiplyScalar(.6) : lip(x, y, z, th, u, cut), 0, 40, 2.05,
+      { us: JU, clip: u => ({ hi: cutY(u), xr: rimX(u) }), warp: (u, x, y) => { if (u !== JU[1]) return [x, y]; const yc = (cutY(u) + sec(u).y - sec(u).hb)/2; return [x*.985, yc + (y - yc)*.985]; } });
     jawGeo.translate(-hinge[0], -hinge[1], -hinge[2]);
     const jm = new THREE.Mesh(jawGeo, skin); jm.castShadow = jm.receiveShadow = true; jaw.add(jm);
     // the inside of the mouth: separate plates with exact edges (painting it on the skin smeared red over the lips).
@@ -155,24 +163,45 @@
       for (let r = 0; r < rows.length - 1; r++) for (const k of [0, 2, 4]){ const a = r*6 + k, b = a + 6; I.push(a, b, a + 1, a + 1, b, b + 1); }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
       g.setIndex(I); g.computeVertexNormals(); return g; }
-    const rows = JU.slice(2, -1);
+    const rows = JU.slice(3, -1);
     body.add(new THREE.Mesh(plate2(rows, -.0015, 0), inside));
     jaw.add(new THREE.Mesh(plate2(rows, .0015, .003, hinge), inside));
-    { const u = UC + EPS, q = sec(u), yc = cutY(u), xr = rimX(u), z = zAt(u) + .0008, P = [0, yc - .02, z], I = [], Cc = [CAV.r, CAV.g, CAV.b];   // the throat wall
+    { const u = UC + EPS, q = sec(u), yc = cutY(u), xr = .96*rimX(u), z = zAt(u) + .0008, P = [0, yc - .02, z], I = [], Cc = [CAV.r, CAV.g, CAV.b];   // the throat wall
       for (let i = 0; i <= 24; i++){ const x = -xr + 2*xr*i/24, d = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x/q.w), 2.05)), 1/2.05);
-        P.push(x, Math.min(yc, q.y - q.hb*d), z); Cc.push(CAV.r*.7, CAV.g*.7, CAV.b*.7); if (i) I.push(0, i, i + 1); }
+        P.push(x, Math.min(yc, q.y - .96*q.hb*d), z); Cc.push(CAV.r*.7, CAV.g*.7, CAV.b*.7); if (i) I.push(0, i, i + 1); }
       for (let i = 0; i <= 24; i++){ P.push(-xr + 2*xr*i/24, yc, z); Cc.push(CAV.r, CAV.g, CAV.b); }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
       for (let i = 0; i < 24; i++) I.push(1 + i, 26 + i, 2 + i, 2 + i, 26 + i, 27 + i);
-      g.setIndex(I); body.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: CAV.clone().multiplyScalar(.45), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }))); }
+      g.setIndex(I); body.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: CAV.clone().multiplyScalar(.45), side: THREE.DoubleSide }))); }
     const uMid = (UC + UF)/2;
     put([[SPH, [0, cutY(uMid) + .002 - hinge[1], zAt(uMid) - hinge[2]], 0, [.5*rimX(uMid), .016, .28*(zAt(UF) - zAt(UC))], c('#c94861')]], jaw, mouthM);   // tongue, on the floor
+    // upper teeth: an overbite, hanging just outside the lower lip all round the U (so they read as triangles from the
+    // front and the side, never half-buried); lower teeth on the jaw's floor, hidden while the mouth is shut
     const tUp = [], tLo = [];
-    for (let i = 0; i < 9; i++){ const k = i/8, u = UF - .006 - (UF - UC - .03)*k, big = 1 - .5*k, yaw = Math.atan2(rimX(u), .25);
-      for (const sg of [-1, 1]){
-        tUp.push([C(0, .0135*big, 6), [sg*(rimX(u) - .005), cutY(u) - .021*big, zAt(u)], [Math.PI, sg*yaw, -sg*.12], [1, .05*big, .55], WHITE]);   // on the lip edge: an overbite
-        if (i > 0 && i < 8) tLo.push([C(0, .012*big, 6), [sg*(rimX(u) - .024), cutY(u) + .019*big - hinge[1], zAt(u) - .006 - hinge[2]], [0, sg*yaw, 0], [1, .046*big, .55], WHITE]); } }
-    tUp.push([C(0, .013, 6), [0, cutY(UF - .003) - .02, zAt(UF - .003) + .004], [Math.PI, 0, 0], [1, .046, .55], WHITE]);
+    // the rim as a polyline from the right corner round the chin to the left corner, measured, teeth at equal steps
+    const RIM = []; for (let i = 0; i <= 120; i++){ const k = i/120, sg = k < .5 ? 1 : -1, q = Math.abs(1 - 2*k), u = UF - (UF - UC - .02)*Math.pow(q, .9);
+      RIM.push([sg*rimX(u), cutY(u), zAt(u), u]); }
+    const acc = [0]; for (let i = 1; i < RIM.length; i++) acc.push(acc[i-1] + Math.hypot(RIM[i][0] - RIM[i-1][0], RIM[i][2] - RIM[i-1][2]));
+    const at = d => { let i = 1; while (i < RIM.length - 1 && acc[i] < d) i++; const a = RIM[i-1], b = RIM[i], f = (d - acc[i-1])/(acc[i] - acc[i-1] || 1);
+      return { p: a.map((v, k) => v + (b[k] - v)*f), dx: b[0] - a[0], dz: b[2] - a[2] }; };
+    const NT = 21, total = acc[acc.length - 1];
+    // each upper tooth hangs along the skin below it (down the jaw's flank, back along the chin), flat against it
+    const skinN = (u, x, y) => { const f = (uu, tt) => new THREE.Vector3(...surf(uu, tt));
+      let a = Math.PI/2, b = Math.PI, sd = x < 0 ? -1 : 1; for (let k = 0; k < 30; k++){ const m = (a + b)/2; if (surf(u, sd*m)[1] > y) a = m; else b = m; }
+      const tt = sd*(a + b)/2, du = f(u + 1e-4, tt).sub(f(u - 1e-4, tt)), dt = f(u, tt + 1e-4).sub(f(u, tt - 1e-4)), n = du.cross(dt).normalize();
+      if (n.dot(f(u, tt).sub(_p.set(0, sec(u).y, zAt(u)))) < 0) n.negate(); return n; };
+    const DOWN = new THREE.Vector3(0, -1, 0), BX = new THREE.Vector3(), BZ = new THREE.Vector3(), BM = new THREE.Matrix4(), BQ = new THREE.Quaternion(), BE = new THREE.Euler();
+    for (let i = 0; i < NT; i++){ const { p } = at(total*(i + .5)/NT), n = skinN(p[3], p[0], p[1]);
+      const tg = DOWN.clone().addScaledVector(n, -DOWN.dot(n)).normalize(), ax = DOWN.clone().lerp(tg, .5).normalize();   // apex direction
+      BZ.copy(n).addScaledVector(ax, -n.dot(ax)).normalize(); BX.crossVectors(ax.clone().negate(), BZ);                 // local -y = apex, z = out
+      BM.makeBasis(BX, ax.clone().negate(), BZ); BQ.setFromRotationMatrix(BM); BE.setFromQuaternion(BQ, 'YXZ');
+      const mid = 1 - Math.abs((i + .5)/NT*2 - 1), big = .6 + .4*Math.pow(mid, .6), h = .05*big;
+      tUp.push([C(.014*big, 0, 6), [p[0] + n.x*.0045 + ax.x*.48*h, p[1] + n.y*.0045 + ax.y*.48*h, p[2] + n.z*.0045 + ax.z*.48*h], [BE.x, BE.y, BE.z], [1, h, .3], WHITE]);
+      const hl = Math.hypot(n.x, n.z) || 1, nx = n.x/hl, nz = n.z/hl;
+      if (i > 1 && i < NT - 2) tLo.push([C(0, .011*big, 6), [p[0] - nx*.02, p[1] + .016*big - hinge[1], p[2] - nz*.02 - hinge[2]], [0, Math.atan2(nx, nz), 0], [1, .042*big, .5], WHITE]); }
+    // the lip: a dark line along the rim, over the roots of the teeth
+    const lipLine = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(RIM.filter((_, i) => i % 3 === 0).map(r => { const n = skinN(r[3], r[0], r[1]); return new THREE.Vector3(r[0] + n.x*.0035, r[1] + n.y*.0035 + .0015, r[2] + n.z*.0035); })), 160, .0045, 8),
+      new THREE.MeshStandardMaterial({ color: c('#3b1a26'), roughness: .5 })); body.add(lipLine);
     put(tUp, body, glossy); put(tLo, jaw, glossy);
     // fins: thin and sharp. Dorsal (falcate), second dorsal, pectorals (long sickles), pelvics, anal, tail (lunate) + keels
     const thin = (pts, d = .022) => plate(pts, d, .005);
@@ -211,7 +240,7 @@
       body.position.y = .86 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .01*Math.sin(t*2.1);
       body.rotation.set(.04*a*dir - .1*sur, 0, .05*a*Math.sin(f*.5));
       tail.rotation.y = (.35*a + .18)*Math.sin(t*(4 + 6*a)) + (st.wag || 0)*.6*Math.sin(t*14);
-      const ch = st.chomp || 0; jaw.rotation.x = .1 + .1*sur + .34*ch*Math.abs(Math.sin(t*8));   // a grin at rest, snapping when chomping
+      const ch = st.chomp || 0; jaw.rotation.x = .12*sur + .34*ch*Math.abs(Math.sin(t*8));   // shut at rest; snaps open when chomping, gapes when surprised
       if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); body.rotation.y = clamp(Math.atan2(v.x, v.z), -.35, .35); }
     } };
   }
