@@ -270,7 +270,7 @@
         const period = max/rate; let born = start + i/rate;
         if (t < born){ p.sp.visible = false; continue; }
         born += Math.floor((t - born)/period)*period;
-        if (born > until) born -= period;                 // emitter stopped: keep the last puffs fading out
+        if (born > until){ const b0 = start + i/rate; born = b0 + Math.floor((until - b0)/period)*period; }   // emitter stopped: only the last puffs, fading out
         const age = t - born, a = age/life;
         if (born < start || a > 1){ p.sp.visible = false; continue; }
         const s = (size[0] + (size[1]-size[0])*Math.sqrt(a))*p.k;

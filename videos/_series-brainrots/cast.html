@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Meet the brainrots</title>
+<link rel="stylesheet" href="../../engine/engine.css">
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="../../engine/engine.js"></script>
+<script src="../../engine/look.js"></script>
+<script src="../../engine/kit.js"></script>
+<script src="../../engine/kit-game.js"></script>
+<script src="../../engine/brainrots.js"></script>
+<script>
+// Brainrot series · character test: the four brainrots in a neutral studio (an infinite backdrop), so only the
+// characters are judged. 0–4 they arrive · 4–9 Sahur · 9–14 Tralalero · 14–19 Bombardiro · 19–24 Ballerina · 24–27.5 all
+const { clamp, smooth, lerp } = Engine;
+const SHOT = [0, 4, 9, 14, 19, 24], END = 27.5;
+const SPOT = { sahur: [-1.45, 0], tralalero: [0, .25], ballerina: [1.45, 0] }, HOVER = [0, 3.5, -2.8], HOVER_YAW = .75;
+const CARDS = {
+  sahur: { name: 'Tung Tung Tung Sahur', rarity: '#c4732f', rarityLabel: 'Brainrot', role: 'The alarm clock', line: 'Wakes up the whole street. With a bat.' },
+  tralalero: { name: 'Tralalero Tralala', rarity: '#2f7fe0', rarityLabel: 'Brainrot', role: 'The runner', line: 'Three legs. Zero brakes.' },
+  bombardiro: { name: 'Bombardiro Crocodilo', rarity: '#5f7d3a', rarityLabel: 'Brainrot', role: 'The big boss', line: 'Solves every problem from above.' },
+  ballerina: { name: 'Ballerina Cappuccina', rarity: '#ee6fa4', rarityLabel: 'Brainrot', role: 'The smart one', line: 'Explains everything. One spin at a time.' },
+};
+const G = Engine.game;
+const planePts = () => [[-1.95, 0, 0], [1.95, 0, 0], [0, .75, -.2], [0, -.45, 0], [0, 0, 2.6], [0, 0, -1.8]].map(([x, y, z]) => [HOVER[0] + x*Math.cos(HOVER_YAW) + z*Math.sin(HOVER_YAW), HOVER[1] + y, HOVER[2] - x*Math.sin(HOVER_YAW) + z*Math.cos(HOVER_YAW)]);
+const person = (x, z, h, w = .45, y = 0, d = w) => [[x - w, y, z], [x + w, y, z], [x, y + h, z], [x, y, z + d], [x, y, z - d], [x - w, y + h*.6, z], [x + w, y + h*.6, z]];
+const CAMS = [
+  G.fit([...person(...SPOT.sahur, 1.5), ...person(...SPOT.tralalero, 1.55, .8), ...person(...SPOT.ballerina, 1.7), [HOVER[0] - 1.9, HOVER[1], HOVER[2]], [HOVER[0] + 1.9, HOVER[1], HOVER[2]], [0, HOVER[1] + .7, HOVER[2]]], { yaw: Math.PI, pitch: -.03, fov: 32, top: .2, bottom: .7 }),
+  G.fit(person(...SPOT.sahur, 1.75), { yaw: Math.PI - .12, pitch: -.04, fov: 30 }),
+  G.fit([...person(...SPOT.tralalero, 1.6, .5, 0, 1), [.9, 0, 1.1], [-.9, 0, 1.1], [0, 0, 1.9], [.9, 1.5, 1.1], [-.9, 1.5, 1.1]], { yaw: Math.PI + .35, pitch: -.12, fov: 30 }),
+  G.fit(planePts(), { yaw: Math.PI - .2, pitch: .04, fov: 30, top: .2, bottom: .56 }),
+  G.fit(person(...SPOT.ballerina, 1.8, .38), { yaw: Math.PI + .1, pitch: -.02, fov: 30 }),
+  G.fit([...person(...SPOT.sahur, 1.5), ...person(...SPOT.tralalero, 1.55, .8), ...person(...SPOT.ballerina, 1.7), [HOVER[0] - 1.9, HOVER[1], HOVER[2]], [HOVER[0] + 1.9, HOVER[1], HOVER[2]], [0, HOVER[1] + .7, HOVER[2]]], { yaw: Math.PI + .08, pitch: -.03, fov: 32, top: .2, bottom: .7 }),
+];
+function camAt(t){
+  let i = 0; while (i < SHOT.length - 1 && t >= SHOT[i+1]) i++;
+  const a = CAMS[i], t0 = SHOT[i], t1 = SHOT[i+1] ?? END, u = smooth(t0, t1, t);
+  const pos = a.pos.map((v, k) => v + (k === 2 ? (1 - u)*.12*a.dist : 0)), look = a.look.slice();   // a slow push in
+  look[2] += (1 - u)*.12*a.dist;
+  return { pos, look, fov: a.fov };
+}
+// the plane's solo: a banking loop round its hover point, back to face the camera, one bomb dropped
+const LOOP = []; for (let k = 0; k <= 10; k++){ const a = k/10*Math.PI*2; LOOP.push({ x: HOVER[0] + Math.sin(a)*2.6, z: HOVER[2] - 2.6 + Math.cos(a)*2.6, y: HOVER[1] + .4*Math.sin(a) }); }
+const T_DROP = 18.2;
+
+Engine.game.fonts().then(() => Engine.create({
+  title: 'Meet the <em>brainrots</em>',
+  hud: 'editorial',
+  ariaLabel: 'Four brainrot characters arrive in a studio and each shows off its signature move',
+  duration: END, tail: .6, seed: 12,
+  fog: [200, 900], fov: 32, far: 900,
+  look: { vignette: 0, grain: 0, exposure: .9, saturation: 1.12, contrast: 1.06, env: .3, bloom: { strength: .25, radius: .4, threshold: 1.6 } },
+  sound: true,
+
+  setup(ctx){
+    const { THREE, scene } = ctx, c = ctx.col, B = Engine.fx.brainrot;
+    ctx.camera.near = .05; ctx.camera.updateProjectionMatrix();
+    // infinite backdrop: floor that curves up into a wall, soft gradient
+    const prof = []; for (let i = 0; i <= 60; i++){ const u = i/60, z0 = 40 - u*48;
+      if (z0 > -6) prof.push([z0, 0]); else { const a = Math.min(1, (-6 - z0)/12.6)*Math.PI/2; prof.push([-6 - Math.sin(a)*8, 8*(1 - Math.cos(a))]); } }
+    for (let y = 9; y <= 60; y += 3) prof.push([-14, y]);
+    const W = 120, pos = [], col = [], idx = [], lo = c('#8a7fc6'), hi = c('#463a94'), tc = new THREE.Color();
+    prof.forEach(([z, y], i) => { for (const x of [-W/2, 0, W/2]){ pos.push(x, y, z); tc.copy(lo).lerp(hi, smooth(0, 30, y + Math.max(0, -z - 6)*.6)); col.push(tc.r, tc.g, tc.b); } });
+    for (let i = 0; i < prof.length - 1; i++) for (let k = 0; k < 2; k++){ const a = i*3 + k, b = a + 1, d = a + 3, e = a + 4; idx.push(a, d, b, b, d, e); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const cyc = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95, envMapIntensity: .3, side: THREE.DoubleSide })); cyc.receiveShadow = true; cyc.position.y = -.08; scene.add(cyc);   // below the stage top: no z-fighting
+    // a round stage, with a ring that takes the colour of whoever is presented
+    const stage = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.75, .12, 64), new THREE.MeshStandardMaterial({ color: c('#b9b0e0'), roughness: .6 }));
+    stage.position.y = -.06; stage.receiveShadow = true; scene.add(stage);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3.62, .045, 8, 96), new THREE.MeshBasicMaterial({ color: c('#ffffff') })); ring.rotation.x = Math.PI/2; ring.position.y = .01; scene.add(ring);
+
+    const ch = {
+      sahur: B(ctx, 'sahur', { height: 1.5 }), tralalero: B(ctx, 'tralalero'), ballerina: B(ctx, 'ballerina'), bombardiro: B(ctx, 'bombardiro'),
+    };
+    const tr = {
+      sahur: B.track([{ t: 0, x: -1.45, z: -5 }, { t: .6, x: -1.45, z: -5 }, { t: 3.2, x: SPOT.sahur[0], z: SPOT.sahur[1] }, { t: 3.6, x: SPOT.sahur[0], z: SPOT.sahur[1], yaw: 0 }]),
+      tralalero: B.track([{ t: 0, x: -7, z: 1.5 }, { t: 2.6, x: SPOT.tralalero[0] - .2, z: SPOT.tralalero[1] + .6 }, { t: 3.3, x: SPOT.tralalero[0], z: SPOT.tralalero[1] }, { t: 3.7, x: SPOT.tralalero[0], z: SPOT.tralalero[1], yaw: 0 },
+        { t: 9.6, x: SPOT.tralalero[0], z: SPOT.tralalero[1], yaw: 0 }, { t: 10.6, x: .9, z: 1.1 }, { t: 11.6, x: 0, z: 1.9 }, { t: 12.6, x: -.9, z: 1.1 }, { t: 13.5, x: SPOT.tralalero[0], z: SPOT.tralalero[1] }, { t: 13.9, x: SPOT.tralalero[0], z: SPOT.tralalero[1], yaw: 0 }]),
+      ballerina: B.track([{ t: 0, x: 7, z: .4 }, { t: 3.4, x: SPOT.ballerina[0], z: SPOT.ballerina[1] }, { t: 3.8, x: SPOT.ballerina[0], z: SPOT.ballerina[1], yaw: 0 }]),
+      bombardiro: B.track([{ t: 0, x: 0, z: -40, y: 12 }, { t: 3.4, x: HOVER[0], z: HOVER[2] - .6, y: HOVER[1] + .1 }, { t: 3.9, x: HOVER[0], z: HOVER[2], y: HOVER[1], yaw: HOVER_YAW },
+        { t: 14.2, x: HOVER[0], z: HOVER[2], y: HOVER[1], yaw: HOVER_YAW }, ...LOOP.map((p, k) => Object.assign({ t: 14.4 + k*.2 }, p)), { t: 16.6, x: HOVER[0], z: HOVER[2], y: HOVER[1] }, { t: 17.0, x: HOVER[0], z: HOVER[2], y: HOVER[1], yaw: HOVER_YAW }]),
+    };
+    const cards = {}; for (const k in CARDS) cards[k] = G.card(ctx, CARDS[k]);
+    const bomb = ch.bombardiro.bombs[0].clone(); bomb.visible = false; scene.add(bomb);
+    const fall = Math.sqrt(2*(HOVER[1] - .44)/9.8);   // the bomb hangs .34 m under the plane, lands at y ~ .1
+    const puff = Engine.fx.smoke(ctx, { origin: [HOVER[0] + .25*Math.sin(HOVER_YAW), .3, HOVER[2] + .25*Math.cos(HOVER_YAW) + .6*fall], start: T_DROP + fall, until: T_DROP + fall + .3, rate: 30, life: 1.8, size: [.5, 2.4], rise: .9, drift: [.15, 0], color: '#efe8dc', opacity: .85, max: 10 });
+    return { ch, tr, cards, ring, bomb, puff, drop: null };
+  },
+
+  update(ctx, t, dt){
+    const S = ctx.state, cam = camAt(t), c = ctx.col;
+    ctx.camera.position.set(...cam.pos); ctx.camera.lookAt(...cam.look);
+    if (ctx.camera.fov !== cam.fov){ ctx.camera.fov = cam.fov; ctx.camera.updateProjectionMatrix(); }
+    ctx.aimSun(0, 0, [-14, 22, 18]);
+    ctx.look.setSky(c('#9d93d2'), c('#5a4fa8')); ctx.sun.intensity = 1.9;
+    const camV = new THREE.Vector3(...cam.pos), shot = SHOT.filter(s => t >= s).length - 1;
+
+    // Sahur: walks in, then tung-tung-tung: three swings of the bat, and a hop
+    { const p = S.tr.sahur(t), o = S.ch.sahur.object; o.position.set(p.x, 0, p.z); o.rotation.y = p.yaw;
+      const sw = [5.4, 6.2, 7.0].reduce((a, k) => Math.max(a, Math.exp(-Math.pow((t - k)/.11, 2))), 0);
+      const raise = smooth(4.9, 5.2, t)*(1 - smooth(7.4, 7.8, t));
+      S.ch.sahur.update(t, { speed: p.speed, look: camV, raise, swing: sw, surprise: smooth(3.2, 3.4, t)*(1 - smooth(4, 4.4, t)) + .8*smooth(24.2, 24.4, t),
+        jump: .22*Math.max(0, Math.sin(clamp((t - 8.05)/.5, 0, 1)*Math.PI)) + .2*Math.max(0, Math.sin(clamp((t - 24.6)/.5, 0, 1)*Math.PI)) });
+      for (const k of [5.4, 6.2, 7.0]) if (t >= k && t - dt < k) ctx.audio.hit('knock', { pitch: 1, ring: .5, strength: .9 }); }
+    // Tralalero: runs in, a lap round the front of the stage, chomps
+    { const p = S.tr.tralalero(t), o = S.ch.tralalero.object; o.position.set(p.x, 0, p.z); o.rotation.y = p.yaw;
+      S.ch.tralalero.update(t, { speed: p.speed, chomp: smooth(12.6, 12.8, t)*(1 - smooth(13.9, 14.1, t)) + smooth(24.2, 24.4, t), wag: smooth(9.2, 9.6, t)*(1 - smooth(10, 10.4, t)), look: p.moving ? null : camV }); }
+    // Ballerina: steps in on pointe, then arms up and a double pirouette, then a bow of the cup
+    { const p = S.tr.ballerina(t), o = S.ch.ballerina.object; o.position.set(p.x, 0, p.z); o.rotation.y = p.yaw;
+      const pir = smooth(20.2, 20.5, t)*(1 - smooth(22.4, 22.7, t)), spin = Math.PI*4*smooth(20.5, 22.4, t);
+      S.ch.ballerina.update(t, { speed: p.speed, arms: .2 + .8*smooth(19.5, 20, t)*(1 - smooth(22.8, 23.3, t)) + .8*smooth(24.2, 24.6, t), pirouette: pir, spin }); }
+    // Bombardiro: flies in, hovers, a banking loop, drops one bomb that lands with a puff
+    { const p = S.tr.bombardiro(t), o = S.ch.bombardiro.object; o.position.set(p.x, 0, p.z); o.rotation.y = p.yaw;
+      const loop = smooth(14.2, 14.6, t)*(1 - smooth(16.2, 16.7, t));
+      S.ch.bombardiro.update(t, { alt: p.y, bank: -.55*loop, pitch: .12*(1 - smooth(2.6, 3.6, t)), chomp: smooth(17.0, 17.2, t)*(1 - smooth(17.8, 18.0, t)) + smooth(24.2, 24.4, t), bombs: t >= T_DROP ? 1 : 2 });
+      if (t >= T_DROP){
+        if (!S.drop){ const w = new THREE.Vector3(); S.ch.bombardiro.object.updateMatrixWorld(true); S.ch.bombardiro.bombs[0].getWorldPosition(w); S.drop = w.toArray(); }
+        const u = t - T_DROP, y = S.drop[1] - .5*9.8*u*u, land = Math.sqrt(2*(S.drop[1] - .1)/9.8);
+        S.bomb.visible = u < land; S.bomb.position.set(S.drop[0], Math.max(.1, y), S.drop[2] + .6*u); S.bomb.rotation.set(Math.min(.9, u*1.2), 0, 0);
+        if (u >= land && u - dt < land){ ctx.audio.hit('impact', { strength: .7 }); S.puffAt = [S.drop[0], S.drop[2] + .6*land, T_DROP + land]; }
+      } else { S.drop = null; S.bomb.visible = false; S.puffAt = null; }
+      ctx.audio.set('hum', .12 + .1*smooth(0, 3, t)); }
+    S.puff.update(t, dt);
+
+    // cards and the stage ring follow whoever is presented
+    const who = ['sahur', 'tralalero', 'bombardiro', 'ballerina'][shot - 1];
+    for (const k in S.cards){ const i = ['sahur', 'tralalero', 'bombardiro', 'ballerina'].indexOf(k) + 1, t0 = SHOT[i];
+      S.cards[k].set(smooth(t0 + .5, t0 + .9, t)*(1 - smooth(t0 + 4.4, t0 + 4.8, t))); }
+    S.ring.material.color.copy(c(who ? CARDS[who].rarity : '#ffffff')).multiplyScalar(1.4);
+    for (const s of SHOT.slice(1)) if (t >= s && t - dt < s) ctx.audio.hit('whoosh', { strength: .3 });
+    return {};
+  },
+}));
+</script>
+</body>
+</html>
