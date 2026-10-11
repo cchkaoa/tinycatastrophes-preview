@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Meet the cast · explained using Fortnite</title>
+<link rel="stylesheet" href="../../engine/engine.css">
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<!-- characters: glTF loader + skeleton cloning (r128 classic scripts) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script src="../../engine/engine.js"></script>
+<script src="../../engine/look.js"></script>
+<script src="../../engine/kit.js"></script>
+<script src="../../engine/cast.js"></script>
+<script src="../../engine/kit-game.js"></script>
+<script src="../../engine/kit-medieval.js"></script>
+<script src="../_series-fortnite/cast-list.js"></script>
+<script>
+// 010 · series "X, explained using Fortnite" · cast presentation (demo step A)
+// Three of the recurring cast on a wooden stage above a medieval valley: each steps forward into a loot beam of
+// their rarity colour, gets a name card and does a gesture; then all three together.
+// 0–3.6 wide · 3.6–9.4 Pip (Common) · 9.4–15.2 Sir Clank (Rare) · 15.2–21 Goldie (Legendary) · 21–24.5 wide
+const { clamp, smooth, lerp } = Engine;
+const SHOT = [0, 3.6, 9.4, 15.2, 21], END = 24.5;
+const ROW_Z = -1.3, FRONT_Z = .55, STAGE_Y = .32;
+const SPOTS = [-1.3, 0, 1.3];
+
+// camera: one key table per shot, a slow move inside each, hard cuts between shots.
+// close(x, top, side): a straight-on medium-full shot of the character standing at (x, FRONT_Z) on the stage whose head
+// (top, m) lands at 15 % of the frame and feet at 63 % (above the name card), dollying from 12 % further away
+const FOV_C = 27, TAN = Math.tan(FOV_C*Math.PI/360);
+function close(x, top, side){
+  const D = (top - STAGE_Y)/(.96*TAN), y = STAGE_Y + .26*D*TAN;
+  return { from: { pos: [x + side*.9, y, FRONT_Z + D*1.12], look: [x, y, FRONT_Z], fov: FOV_C }, to: { pos: [x + side*.35, y, FRONT_Z + D], look: [x, y, FRONT_Z], fov: FOV_C } };
+}
+const CAMS = [
+  { from: { pos: [0, 1.5, 16.5], look: [0, 2.3, -40], fov: 31 }, to: { pos: [0, 1.4, 14.6], look: [0, 2.2, -40], fov: 31 } },
+  close(SPOTS[0], STAGE_Y + 1.62, 1),
+  close(SPOTS[1], STAGE_Y + 1.92, -1),
+  close(SPOTS[2], STAGE_Y + 1.8, -1),
+  { from: { pos: [0, 1.3, 12.6], look: [0, 1.9, -40], fov: 31 }, to: { pos: [0, 1.5, 15], look: [0, 2.0, -40], fov: 31 } },
+];
+function camAt(t){
+  let i = 0; while (i < SHOT.length - 1 && t >= SHOT[i+1]) i++;
+  const a = CAMS[i], t0 = SHOT[i], t1 = SHOT[i+1] ?? END, u = smooth(t0, t1, t)*.85 + clamp((t - t0)/(t1 - t0), 0, 1)*.15;
+  const L = (p, q) => p.map((v, k) => lerp(v, q[k], u));
+  return { pos: L(a.from.pos, a.to.pos), look: L(a.from.look, a.to.look), fov: lerp(a.from.fov, a.to.fov, u) };
+}
+
+// terrain: a plateau for the stage that falls away into a valley, the castle hill and a ridge behind
+const CASTLE = [-6, -150];
+const bumps = Engine.game.hills([{ x: CASTLE[0], z: CASTLE[1], r: 58, h: 16, flat: 22 }, { x: 34, z: -70, r: 30, h: 9 }, { x: -46, z: -60, r: 32, h: 11 },
+  { x: 22, z: -150, r: 60, h: 16 }, { x: -9, z: 22, r: 12, h: 1.2 }, { x: 11, z: 18, r: 10, h: .9 }]);
+const ground = (x, z) => { const d = Math.hypot(x*.8, z + 2); return bumps(x, z) - 7*smooth(18, 46, d); };
+const onStage = (x, z) => Math.abs(x) < 3.7 && z > -2.5 && z < 1.4;
+
+Engine.cast.load(CAST.models).then(Engine.game.fonts).then(() => Engine.create({
+  title: 'Meet the <em>cast</em>',
+  hud: 'editorial',
+  ariaLabel: 'Three cartoon characters step forward on a wooden stage, each lit by a beam in their rarity colour',
+  duration: END, tail: 1,
+  seed: 10,
+  fog: [120, 900], fov: 34, far: 1400,
+  look: { vignette: 0, grain: 0, exposure: .9, saturation: 1.12, contrast: 1.06, bloom: { strength: .35, radius: .45, threshold: 1.1 } },
+  sound: true,
+  samples: ['nature/birds-morning', 'people/applause-150'],
+
+  setup(ctx){
+    const { THREE, scene, R } = ctx, c = ctx.col, G = Engine.game, med = Engine.med;
+    ctx.camera.near = .1; ctx.camera.updateProjectionMatrix();
+    const terrain = G.terrain(ctx, { size: [900, 900], center: [0, -300], seg: [170, 170], height: ground, grass: '#4e9a38', dark: '#377f31', dry: '#8fb048' });
+
+    // the stage: wooden "build" floor tiles (planks, nail heads, darker frame)
+    const plank = G.canvasTex(256, 256, (g, w, h) => {
+      const r = Engine.mulberry32(3);
+      for (let i = 0; i < 5; i++){ const v = 150 + Math.floor(r()*40); g.fillStyle = `rgb(${v + 40},${v - 5},${v - 60})`; g.fillRect(0, i*h/5, w, h/5);
+        g.fillStyle = 'rgba(60,30,10,.55)'; g.fillRect(0, i*h/5, w, 3); g.fillRect(r()*w, i*h/5, 3, h/5);
+        for (let k = 0; k < 30; k++){ g.fillStyle = `rgba(90,50,20,${.08 + r()*.1})`; g.fillRect(r()*w, i*h/5 + r()*h/5, 30 + r()*80, 2); } }
+      g.strokeStyle = '#5b3313'; g.lineWidth = 10; g.strokeRect(5, 5, w - 10, h - 10);
+      g.fillStyle = '#3d2210'; for (const x of [18, w - 18]) for (const y of [18, h - 18]) { g.beginPath(); g.arc(x, y, 5, 0, 6.3); g.fill(); }
+    });
+    const tileM = new THREE.MeshStandardMaterial({ map: plank, roughness: .78, envMapIntensity: .5 });
+    for (let ix = -1; ix <= 1; ix++) for (let iz = 0; iz < 2; iz++){
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(2.42, .3, 1.98), [tileM, tileM, tileM, tileM, tileM, tileM]);
+      tile.position.set(ix*2.45, STAGE_Y - .15, -1.6 + iz*2.0 + .55); tile.castShadow = tile.receiveShadow = true; scene.add(tile);
+    }
+
+    // the valley: castle on its hill, village, church, windmill, fields painted by hedges and fences
+    const B = med.builder(ctx);
+    med.castle(B, { x: CASTLE[0], y: ground(...CASTLE) - .5, z: CASTLE[1], s: .62, yaw: .2, stone: '#a39a8c', stone2: '#8e8578' });
+    const HUTS = [[-26, -44, .5], [-15, -52, -.2], [-32, -56, .9], [9, -46, -.6], [16, -40, .3], [22, -55, -.9], [-6, -62, .1], [4, -72, .7], [-12, -76, -.4], [26, -68, .4]];
+    HUTS.forEach(([x, z, yaw], i) => med.hut(B, { x, y: ground(x, z), z, yaw, s: .9 + (i % 3)*.08, roof: i % 4 === 1 ? '#c99a3e' : '#d8b04e', wall: i % 3 === 2 ? '#e4cfa5' : '#efdfbd' }));
+    med.church(B, { x: 13, y: ground(13, -82), z: -82, yaw: -.4, s: .85 });
+    med.manor(B, { x: -24, y: ground(-24, -66), z: -66, yaw: .5, s: .8, roof: '#9c4a32' });
+    for (const [x, z] of [[-12, -40], [10, -58], [-28, -48], [18, -48]]) med.stack(B, x, ground(x, z), z, .8);
+    med.fence(B, [[-36, -36], [-16, -34], [-4, -38], [12, -34], [30, -38]], 1.1, ground);
+    const mill = med.windmill(B, ctx, { x: 34, y: ground(34, -70), z: -70, yaw: -.5, s: .9 });
+    B.finish();
+
+    // trees: woods on the slopes, keeping the stage, the camera's view and the village clear
+    const T = [];
+    for (let i = 0; i < 260; i++){
+      const x = R(-150, 150), z = R(-260, 10);
+      if (Math.abs(x) < 9 && z > -30) continue;                         // stage + view corridor
+      if (Math.hypot(x - CASTLE[0], z - CASTLE[1]) < 24 || (Math.abs(x) < 36 && z < -32 && z > -78)) continue;   // castle, village
+      T.push({ x, z, s: R(.9, 1.5), kind: ctx.rnd() < .25 ? 'pine' : 'round', far: Math.hypot(x, z) > 60 });
+    }
+    for (const [x, z] of [[-6.5, -4], [6.8, -3.5], [-8, 1.5], [7.5, 2], [-5.2, -7], [5.5, -8]]) T.push({ x, z, s: R(.8, 1.1), kind: 'bush' });
+    for (const [x, z, s] of [[-8.5, -9, 1.3], [9, -10, 1.2], [-12, -3, 1.4], [12.5, -2, 1.3]]) T.push({ x, z, s, kind: 'round' });
+    // a flower bed along the stage front, more flowers on the sides (the close-ups' camera corridor stays clear)
+    for (let x = -3.4; x <= 3.4; x += R(.45, .7)) T.push({ x, z: R(1.75, 2.3), s: R(.5, .75), kind: 'flowers' });
+    for (let i = 0; i < 50; i++){ const x = (ctx.rnd() < .5 ? -1 : 1)*R(3.6, 9), z = R(1.8, 18); T.push({ x, z, s: R(.6, 1.1), kind: ctx.rnd() < .75 ? 'flowers' : 'bush' }); }
+    G.trees(ctx, T, ground);
+
+    // the three of the cast shown here (looks: cast-list.js), stepping forward one by one
+    const stageGround = (x, z) => onStage(x, z) ? STAGE_Y : ground(x, z);
+    const look = i => [lerp(CAMS[i + 1].from.pos[0], CAMS[i + 1].to.pos[0], .5), 1.0, 6.8];
+    const chars = ['pip', 'clank', 'goldie'].map((id, i) => {
+      const x = SPOTS[i], t0 = SHOT[i + 1] + .35, show = CAST.byId[id];
+      const keys = [{ t: 0, x, z: ROW_Z, yaw: 0 }, { t: t0, x, z: ROW_Z, yaw: 0, look: look(i) }, { x, z: FRONT_Z, gait: 'walk', v: .95 },
+        ...show.gesture.map(([clip, d]) => ({ t: t0 + 2.05 + d, x, z: FRONT_Z, yaw: 0, act: clip, look: look(i), then: 'idle' })),
+        { t: SHOT[4] + .4 + i*.12, x, z: FRONT_Z, yaw: 0, act: 'Cheer', look: [0, 1.3, 10] }];
+      return Engine.cast.make(ctx, Object.assign({ keys, ground: stageGround }, CAST.spec(id, ctx)));
+    });
+    const beams = SPOTS.map((x, i) => G.beam(ctx, { color: G.RARITY[CAST.byId[['pip', 'clank', 'goldie'][i]].rarity], radius: .42, ring: 1.7, behind: .75, height: 7, at: [x, STAGE_Y + .01, FRONT_Z] }));
+    const cards = ['pip', 'clank', 'goldie'].map(id => G.card(ctx, CAST.byId[id]));
+
+    // villagers going about their day on the slope behind the stage
+    const folk = [];
+    for (let i = 0; i < 16; i++){
+      const z = R(-7, -17), x0 = R(-9, 9), dir = ctx.rnd() < .5 ? -1 : 1, len = R(4, 9), v = R(.55, .8), x1 = x0 + dir*len, pause = R(2, 5);
+      // walk over, stop for a moment (the act plays at the arrival key), walk back
+      const keys = [{ t: 0, x: x0, z }, { x: x1, z, gait: 'walk', v, act: ctx.pick(['idle', 'Interact', 'PickUp', 'Cheer']) },
+        { t: len/v + pause, x: x1, z }, { x: x0, z, gait: 'walk', v }];
+      folk.push(Engine.cast.make(ctx, Object.assign({ keys, ground }, CAST.extra(ctx))));
+    }
+
+    return { terrain, chars, beams, cards, mill, folk,
+      clouds: Engine.fx.clouds(ctx, { count: 12, height: [70, 120], spread: 520, center: [0, 0, -260], size: [70, 140] }),
+      birds: Engine.fx.birds(ctx, { count: 14, center: [-10, 40, -120], radius: [10, 40] }) };
+  },
+
+  update(ctx, t, dt){
+    const S = ctx.state, G = Engine.game, cam = camAt(t);
+    ctx.camera.position.set(...cam.pos); ctx.camera.lookAt(...cam.look);
+    if (ctx.camera.fov !== cam.fov){ ctx.camera.fov = cam.fov; ctx.camera.updateProjectionMatrix(); }
+    ctx.aimSun(0, -6, [-30, 48, 52]);   // from the camera's left, high: lit faces, shadows fall back across the stage
+    ctx.look.setSky(ctx.col('#c4e6ff'), ctx.col('#2f86e8'));
+
+    S.chars.forEach((ch, i) => {
+      const t0 = SHOT[i + 1] + .35, on = smooth(t0 + 1.2, t0 + 2.0, t);
+      ch.update(t);
+      ch.rim(.5*on*(1 - .5*smooth(t0 + 5.2, t0 + 6, t)) + .2*smooth(SHOT[4], SHOT[4] + .6, t));
+      S.beams[i].set(on*(1 - .45*smooth(t0 + 5.2, t0 + 6, t)) + .45*smooth(SHOT[4] + .3, SHOT[4] + 1, t));
+      S.cards[i].set(smooth(t0 + 1.4, t0 + 1.9, t)*(1 - smooth(t0 + 5, t0 + 5.4, t)));
+      if (t >= t0 + 1.25 && t - dt < t0 + 1.25) ctx.audio.hit('whoosh', { strength: .6 });
+    });
+    for (const f of S.folk) f.update(t);
+    S.mill.userData.spin.rotation.z = -t*.6;
+    S.clouds.update(t, { wind: 1.5 });
+    S.birds.update(t);
+    ctx.audio.set('nature/birds-morning', .45);
+    if (t >= SHOT[4] + .4 && t - dt < SHOT[4] + .4) ctx.audio.hit('people/applause-150', { gain: .55 });
+    return {};
+  },
+}));
+</script>
+</body>
+</html>

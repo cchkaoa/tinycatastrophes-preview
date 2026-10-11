@@ -1,0 +1,151 @@
+/* Bahnschrift ships with Windows; Barlow Semi Condensed is the web fallback with the same DIN feel. */
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,400;0,500;0,600;0,800;1,800;1,900&display=swap");
+/* editorial HUD: Caslon titles, Futura text (Jost is the free web stand-in for Futura) */
+@import url("https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=Libre+Caslon+Text:wght@400;700&display=swap");
+
+/* Tiny Catastrophes identity: near-black ink, white type, one orange accent.
+   Layout: one 9:16 stage centred in a black frame; the WebGL scene fills it and the HUD sits inside
+   the TikTok / Shorts safe zones (top tabs, bottom caption, right action rail). */
+:root{
+  --frame:#06080a;
+  --ink:#f4f5f7;
+  --ink-dim:rgba(244,245,247,.7);
+  --ink-faint:rgba(244,245,247,.34);
+  --accent:#ff5a1f;
+  --scrim:rgba(18,21,25,.8);
+  --scrim-a:.8;
+  --display:"Bahnschrift","Barlow Semi Condensed","Segoe UI",system-ui,sans-serif;
+  --mono:"Bahnschrift","Barlow Semi Condensed","Segoe UI",system-ui,sans-serif;
+  /* platform safe zones, as a share of the stage */
+  --safe-top:9%;
+  --safe-bottom:19%;
+  --safe-right:15%;
+  --gutter:7cqw;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0}
+body{background:var(--frame);color:var(--ink);display:grid;place-items:center;overflow:hidden}
+
+.stage{position:relative;width:min(100vw,56.25vh);height:min(100vh,177.78vw);overflow:hidden;background:#3a4248;container-type:size}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.scrim{position:absolute;left:0;right:0;pointer-events:none}
+.scrim.top{top:0;height:38%;background:linear-gradient(to bottom,rgba(18,21,25,var(--scrim-a)) 0%,rgba(18,21,25,calc(var(--scrim-a)*.52)) 55%,transparent 100%)}
+.scrim.bottom{bottom:0;height:42%;background:linear-gradient(to top,rgba(18,21,25,var(--scrim-a)) 0%,rgba(18,21,25,calc(var(--scrim-a)*.62)) 50%,transparent 100%)}
+
+.title{position:absolute;top:var(--safe-top);left:0;right:0;padding:0 var(--gutter);display:grid;gap:2.6cqw}
+.title h1{margin:0;font-family:var(--display);font-weight:600;font-stretch:condensed;font-size:10.4cqw;line-height:.98;letter-spacing:-.005em;text-wrap:balance;text-shadow:0 .15cqw .6cqw rgba(0,0,0,.35),0 .4cqw 3cqw rgba(0,0,0,.45)}
+.title h1 em{font-style:normal;color:var(--accent)}
+.status{margin:0;font-family:var(--mono);font-size:2.9cqw;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);display:flex;align-items:center;gap:2cqw;min-height:1.2em}
+.status::before{content:"";width:6cqw;height:2px;background:var(--accent)}
+
+/* channel signature above the title: logo mark + name, so reposts still credit the account */
+.brand{display:flex;align-items:center;gap:2cqw;font-family:var(--mono);font-weight:500;font-size:2.8cqw;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)}
+.brand .badge{width:7cqw;height:7cqw;border-radius:50%;background:#fff;display:grid;place-items:center;flex:none}
+.brand .badge img{width:4.4cqw;height:auto;display:block}
+
+/* vertical gauge on the left edge, clear of the right action rail */
+.gauge{position:absolute;left:calc(var(--gutter) + 5cqw);top:31%;height:31%;width:3.2cqw}
+.gauge-board{position:absolute;inset:0;border-right:1px solid var(--ink-faint)}
+.gauge-ticks{position:absolute;inset:0}
+.gauge-ticks i{position:absolute;right:0;height:1px;background:var(--ink-faint);width:55%}
+.gauge-ticks i.major{width:100%;background:var(--ink-dim)}
+.gauge-fill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(to top,color-mix(in srgb,var(--accent) 55%,transparent),color-mix(in srgb,var(--accent) 22%,transparent));border-top:2px solid var(--accent)}
+.gauge-labels{position:absolute;inset:0;font-family:var(--mono);font-size:2.3cqw;color:var(--ink-dim);font-variant-numeric:tabular-nums}
+.gauge-labels span{position:absolute;right:calc(100% + 1.6cqw);transform:translateY(50%);line-height:1}
+.gauge-cap{position:absolute;bottom:calc(100% + 2.4cqw);left:0;font-family:var(--mono);font-size:2.2cqw;letter-spacing:.14em;color:var(--ink-faint);white-space:nowrap}
+
+.readout{position:absolute;left:0;right:0;bottom:var(--safe-bottom);padding:0 var(--safe-right) 0 var(--gutter);display:flex;justify-content:space-between;align-items:flex-end;gap:4cqw}
+.metric{display:grid;gap:1.2cqw;min-width:0}
+.metric .label{font-family:var(--mono);font-size:2.6cqw;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim)}
+.metric .value{font-family:var(--mono);font-weight:500;font-size:12.5cqw;line-height:.95;font-variant-numeric:tabular-nums;letter-spacing:-.03em;white-space:nowrap}
+.metric .unit{font-size:.42em;font-weight:400;margin-left:.25em;color:var(--ink-dim);letter-spacing:0}
+.metric .sub{font-family:var(--mono);font-size:2.6cqw;color:var(--accent);letter-spacing:.06em;font-variant-numeric:tabular-nums;min-height:1.2em}
+.metric.side{text-align:right}
+.metric.side .value{font-size:6.4cqw;font-weight:400}
+.metric.side .unit{font-size:.5em}
+
+.replay{position:absolute;left:50%;bottom:calc(var(--safe-bottom) + 24%);transform:translateX(-50%);font:500 3cqw/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink);background:rgba(18,21,25,.6);border:1px solid var(--ink-faint);border-radius:99px;padding:2.4cqw 5cqw;cursor:pointer;backdrop-filter:blur(6px)}
+.replay:hover{border-color:var(--ink-dim)}
+.replay:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* G key: show the platform UI zones while composing */
+.safe-guides{position:absolute;inset:0;pointer-events:none}
+.safe-guides div{position:absolute;background:rgba(255,60,60,.18);outline:1px dashed rgba(255,90,90,.8)}
+.safe-guides .t{top:0;left:0;right:0;height:var(--safe-top)}
+.safe-guides .b{bottom:0;left:0;right:0;height:var(--safe-bottom)}
+.safe-guides .r{top:var(--safe-top);bottom:var(--safe-bottom);right:0;width:var(--safe-right)}
+
+.hud-hidden .title,.hud-hidden .readout,.hud-hidden .gauge,.hud-hidden .scrim{display:none}
+.engine-fail{position:absolute;inset:auto var(--gutter) 45% var(--gutter);font-family:var(--mono);font-size:3cqw;color:var(--ink-dim)}
+
+/* sound: browsers need one click before audio can play */
+.sound-hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;font:500 3.4cqw/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#fff;background:var(--accent);border:0;border-radius:99px;padding:3cqw 6cqw;cursor:pointer;box-shadow:0 1cqw 4cqw rgba(0,0,0,.35)}
+.sound-hint:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.engine-toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:500 3cqw/1.3 var(--mono);letter-spacing:.08em;color:var(--ink);background:rgba(18,21,25,.85);border-radius:2cqw;padding:2.4cqw 4cqw;pointer-events:none;text-align:center}
+
+/* frame-by-frame export: nothing interactive on screen */
+.exporting .replay,.exporting .sound-hint,.exporting .engine-toast,.exporting .safe-guides,.exporting .engine-meter{display:none!important}
+
+/* F key: live frame meter */
+.engine-meter{white-space:pre-line;position:absolute;left:2cqw;top:2cqw;z-index:5;font:500 2.6cqw/1.2 var(--mono);letter-spacing:.04em;color:#fff;background:rgba(10,12,14,.72);padding:1cqw 2cqw;border-radius:1cqw;pointer-events:none}
+
+/* keeps counters and labels legible over bright scenes when the scrim is light */
+.readout,.status,.brand,.gauge-labels{text-shadow:0 .15cqw .7cqw rgba(0,0,0,.5)}
+
+/* ---------- hud: 'editorial' — the house style since 2026-10-08 ----------
+   Title: Caslon, white, centred at the top, the <em> word in orange capitals; fades out at ~3-3.8 s (engine.js).
+   Everything else: Futura, black at full opacity with a white halo, centred in the lower part. No dark scrims. */
+.hud-editorial{
+  --caslon:"Big Caslon","Adobe Caslon Pro","Libre Caslon Text",Georgia,serif;
+  --futura:"Futura","Futura PT","Jost","Century Gothic",sans-serif;
+  --halo:0 0 .6cqw rgba(255,255,255,.95),0 0 1.8cqw rgba(255,255,255,.8),0 0 3.6cqw rgba(255,255,255,.45);
+}
+.hud-editorial .scrim{display:none}
+.hud-editorial .title{left:var(--safe-right);right:var(--safe-right);padding:0;justify-items:center;text-align:center;gap:3.2cqw}
+.hud-editorial .title h1{font-family:var(--caslon);font-weight:700;font-stretch:normal;font-size:8.4cqw;line-height:1.1;letter-spacing:0;color:#fff;
+  text-shadow:0 .25cqw .9cqw rgba(0,0,0,.55),0 0 3.5cqw rgba(0,0,0,.35)}
+.hud-editorial .title h1 em{font-style:normal;text-transform:uppercase;color:var(--accent)}
+.hud-editorial .brand{font-family:var(--futura);font-weight:600;color:#fff;text-shadow:0 .2cqw .8cqw rgba(0,0,0,.5)}
+.hud-editorial .lower{position:absolute;left:var(--safe-right);right:var(--safe-right);bottom:var(--safe-bottom);display:flex;flex-direction:column;
+  align-items:center;gap:2.6cqw;text-align:center;color:#111;text-shadow:var(--halo)}
+.hud-editorial .lower .status{font-family:var(--futura);font-weight:600;font-size:4.4cqw;line-height:1.2;letter-spacing:.01em;text-transform:none;
+  color:#111;justify-content:center;text-wrap:balance;text-shadow:var(--halo)}
+.hud-editorial .lower .status::before{display:none}
+.hud-editorial .lower .readout{position:static;padding:0;flex-direction:column;align-items:center;justify-content:flex-end;gap:1.6cqw;text-shadow:var(--halo)}
+.hud-editorial .lower .metric{justify-items:center;text-align:center}
+.hud-editorial .lower .metric .label{font-family:var(--futura);font-weight:600;font-size:2.8cqw;letter-spacing:.14em;color:#111}
+.hud-editorial .lower .metric .value{font-family:var(--futura);font-weight:600;font-size:10.5cqw;letter-spacing:-.01em;color:#111}
+.hud-editorial .lower .metric .unit{color:#111;opacity:.85}
+.hud-editorial .lower .metric .sub{font-family:var(--futura);font-weight:600;font-size:3cqw;letter-spacing:.04em;color:#111}
+.hud-editorial .lower .metric.side .value{font-size:5.6cqw;font-weight:500}
+.hud-editorial .gauge-labels,.hud-editorial .gauge-cap{font-family:var(--futura);font-weight:600;color:#111;text-shadow:var(--halo)}
+.hud-editorial .gauge-board{border-right-color:rgba(17,17,17,.55)}
+.hud-editorial .gauge-ticks i{background:rgba(17,17,17,.45)}.hud-editorial .gauge-ticks i.major{background:rgba(17,17,17,.8)}
+.hud-hidden .lower{display:none}
+
+/* ---------- game kit (engine/kit-game.js): the "explained using Fortnite" series ----------
+   Captions: one big white word at a time in the centre (stress words in the accent), popping in.
+   Card: rarity lower third. Bars: shield over health above a character. Feed: elimination log. */
+:root{--game-face:"Barlow Semi Condensed","Bahnschrift","Arial Narrow",sans-serif}
+.game-captions{position:absolute;left:var(--safe-right);right:var(--safe-right);top:var(--cap-y,58%);transform:translateY(-50%);display:flex;justify-content:center;pointer-events:none;z-index:3}
+.game-captions .word{font-family:var(--game-face);font-weight:900;font-style:italic;font-size:var(--cap-size,13cqw);line-height:1;letter-spacing:-.005em;text-transform:uppercase;color:#fff;white-space:nowrap;
+  -webkit-text-stroke:1.15cqw #111;paint-order:stroke fill;text-shadow:0 .9cqw 0 #111,0 1.4cqw 2.6cqw rgba(0,0,0,.45);transform-origin:50% 60%}
+.game-captions .word.stress{color:var(--accent)}
+.game-card{position:absolute;left:50%;bottom:calc(var(--safe-bottom) + 3cqw);width:66cqw;transform:translateX(-50%) skewX(-6deg);display:grid;gap:.6cqw;padding:2.4cqw 4cqw 2.8cqw;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--rar) 82%,#000) 0%,color-mix(in srgb,var(--rar) 45%,#0d0f1a) 100%);border-left:2.2cqw solid var(--rar);
+  box-shadow:0 1.4cqw 4cqw rgba(0,0,0,.4),inset 0 0 0 .35cqw color-mix(in srgb,var(--rar) 70%,#fff);color:#fff;font-family:var(--game-face);pointer-events:none;z-index:2}
+.game-card .rar{font-weight:800;font-style:italic;font-size:3.4cqw;letter-spacing:.22em;color:color-mix(in srgb,var(--rar) 35%,#fff)}
+.game-card .name{font-weight:900;font-style:italic;font-size:8.2cqw;line-height:.95;text-transform:uppercase;text-shadow:0 .5cqw 0 rgba(0,0,0,.35)}
+.game-card .role{font-weight:800;font-style:italic;font-size:3.6cqw;letter-spacing:.06em;text-transform:uppercase;color:#ffe9b0}
+.game-card .line{font-weight:600;font-size:3.9cqw;line-height:1.15;color:rgba(255,255,255,.92)}
+.game-bars{position:absolute;width:24cqw;transform:translate(-50%,-100%);display:grid;gap:.5cqw;pointer-events:none;z-index:2;font-family:var(--game-face)}
+.game-bars .who{font-weight:800;font-style:italic;font-size:3cqw;color:#fff;text-align:center;text-shadow:0 .3cqw .8cqw rgba(0,0,0,.7);text-transform:uppercase}
+.game-bars .bar{position:relative;height:2.4cqw;background:rgba(10,12,20,.7);border:.35cqw solid rgba(0,0,0,.75);border-radius:.6cqw;overflow:hidden;transform:skewX(-10deg)}
+.game-bars .fill{position:absolute;inset:0 auto 0 0;width:0}
+.game-bars .shield .fill{background:linear-gradient(#7fd2ff,#2f8fe8)}
+.game-bars .hp .fill{background:linear-gradient(#a8f07a,#3fae35)}
+.game-bars .num{position:absolute;right:1cqw;top:50%;transform:translateY(-50%) skewX(10deg);font-weight:800;font-size:2.2cqw;color:#fff;text-shadow:0 0 .5cqw #000}
+.game-feed{position:absolute;left:var(--gutter);top:calc(var(--safe-top) + 26%);display:grid;gap:1cqw;pointer-events:none;z-index:2;font-family:var(--game-face)}
+.game-feed .row{font-weight:800;font-style:italic;font-size:3.3cqw;color:#fff;background:rgba(10,12,20,.55);padding:.7cqw 2cqw;border-radius:.8cqw;text-shadow:0 .2cqw .5cqw #000}
+.game-feed .row i{font-weight:600;margin:0 1.4cqw;color:#ffd77a}
+.hud-hidden .game-captions,.hud-hidden .game-card,.hud-hidden .game-bars,.hud-hidden .game-feed{display:none}

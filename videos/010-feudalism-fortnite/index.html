@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Feudalism, explained using Fortnite</title>
+<link rel="stylesheet" href="../../engine/engine.css">
+<style>
+/* the "peasant pass": a season-pass bar that never ends (this episode only) */
+.pass{position:absolute;left:12%;right:12%;top:36%;display:grid;gap:1.2cqw;padding:2.2cqw 3.4cqw 2.6cqw;background:linear-gradient(100deg,rgba(18,22,40,.86),rgba(40,46,80,.78));
+  border:.4cqw solid rgba(255,255,255,.55);transform:skewX(-6deg);font-family:var(--game-face);color:#fff;pointer-events:none;z-index:2}
+.pass .top{display:flex;justify-content:space-between;align-items:baseline;font-weight:900;font-style:italic;text-transform:uppercase}
+.pass .top b{font-size:6cqw;letter-spacing:.01em}.pass .top span{font-size:4.2cqw;color:#ffd77a}
+.pass .track{display:grid;grid-template-columns:repeat(10,1fr);gap:.8cqw}
+.pass .track i{height:2.6cqw;background:rgba(255,255,255,.18);border-radius:.4cqw}
+.pass .track i.on{background:linear-gradient(#ffb36b,var(--accent))}
+.pass .sub{font-weight:700;font-style:italic;font-size:3.3cqw;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:.08em}
+.hud-hidden .pass{display:none}
+</style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script src="../../engine/engine.js"></script>
+<script src="../../engine/look.js"></script>
+<script src="../../engine/kit.js"></script>
+<script src="../../engine/cast.js"></script>
+<script src="../../engine/kit-game.js"></script>
+<script src="../../engine/kit-medieval.js"></script>
+<script src="../_series-fortnite/cast-list.js"></script>
+<script>
+// 010 · Feudalism, explained using Fortnite · demo step B: the "peasant pass" beat (32–51.6 s of the script, GUION.md),
+// here on its own clock from 0. Six shots, word-by-word captions, prices on boards in the scene:
+// 0–3.7 wide over the manor, fields full of serfs · 3.7–7.5 Pip hoeing the lord's field (2–3 days a week)
+// 7.5–11 the tithe: 10 coins of 100 fly from her harvest into the Church's chest · 11–14.2 the lord's mill
+// 14.2–16.8 the edge of the map: leaving needs the lord's permission · 16.8–19.8 Sir Clank steps in: the shield
+const { clamp, smooth, lerp } = Engine;
+const SHOT = [0, 3.7, 7.5, 11.0, 14.2, 16.8], END = 19.8;
+const LINES = [
+  [.15, 'Many were *serfs*, and their *battle* *pass* never ended.'],
+  [3.8, 'Work the lord\'s fields, often *two* *or* *three* *days* a week.'],
+  [7.6, 'Give a *tenth* of your harvest to the Church.'],
+  [11.1, 'Pay to grind your grain at the lord\'s *mill*.'],
+  [14.3, 'And leave the map? Only with *permission*.'],
+  [16.95, 'In return, the lord was your *shield*.'],
+];
+// places (m): fields east of the village, the mill on a mound, the road south to the edge of the manor
+const PIP_FIELD = [14, 12], PILE = [4.9, 4.0], CHEST = [4.2, .6], MILL = [27, -32], EDGE_Z = 52, ROAD_X = 2.2;
+const FX = [0, 44], FZ = [-8, 36];   // the open fields (strips run north-south)
+
+// a flat valley floor (fields, village, road) ringed by hills: the castle's to the north-west
+const bumps = Engine.game.hills([{ x: -34, z: -150, r: 60, h: 24, flat: 20 }, { x: 60, z: -110, r: 50, h: 16 }, { x: -95, z: -40, r: 55, h: 18 },
+  { x: 100, z: 20, r: 60, h: 14 }, { x: MILL[0], z: MILL[1], r: 11, h: 2.2, flat: 3 }, { x: -70, z: 80, r: 50, h: 10 }]);
+const ground = (x, z) => bumps(x, z) + .5*Math.sin(x*.05)*Math.sin(z*.04)*smooth(40, 70, Math.hypot(x - 10, z - 10));
+const inFields = (x, z) => x > FX[0] && x < FX[1] && z > FZ[0] && z < FZ[1];
+
+// the close shots are framed by Engine.game.fit: the camera along a chosen direction at the closest distance where the
+// listed points (people from feet to head, board corners) sit in the top part of the frame, clear of the captions;
+// each dollies in from 12 % further away and drifts a little sideways
+const ground0 = (x, z) => ground(x, z);
+const person = (x, z, h = 1.7) => [[x, ground0(x, z), z], [x, ground0(x, z) + h, z], [x - .35, ground0(x, z) + h*.6, z], [x + .35, ground0(x, z) + h*.6, z]];
+function boardPts(x, z, yaw, w, lift, h){ const y = ground0(x, z), dx = Math.cos(yaw)*w/2, dz = -Math.sin(yaw)*w/2;
+  return [[x - dx, y + lift, z - dz], [x + dx, y + lift, z + dz], [x - dx, y + lift + h, z - dz], [x + dx, y + lift + h, z + dz]]; }
+function fitShot(pts, o){
+  const G = Engine.game, a = G.fit(pts, o), b = G.fit(pts, Object.assign({}, o, { yaw: o.yaw + (o.drift ?? .06), push: 1.12 }));
+  for (const k of [a, b]){ const lift = Math.max(0, ground0(k.pos[0], k.pos[2]) + .7 - k.pos[1]); k.pos[1] += lift; k.look[1] += lift; }   // never below the ground
+  return { from: { pos: b.pos, look: b.look, fov: o.fov }, to: { pos: a.pos, look: a.look, fov: o.fov } }; }
+const SIGN5 = [ROAD_X + 1.9, EDGE_Z - 4.6];
+const CAMS = [
+  { from: { pos: [36, 17, 50], look: [4, 3, -22], fov: 36 }, to: { pos: [33, 13.5, 44], look: [4, 3.2, -22], fov: 36 } },
+  fitShot([...person(...PIP_FIELD, 1.75), ...boardPts(16.9, 7.4, -.55, 2.3, .9, 1.55)], { yaw: 2.36, pitch: -.12, fov: 30 }),
+  fitShot([...person(PILE[0] - .75, PILE[1] - .95, 1.75), [PILE[0] - .7, 0, PILE[1] + .7], [PILE[0] + 1.7, 0, PILE[1] + .6], [PILE[0], .7, PILE[1]], [PILE[0] + 1.6, .75, PILE[1] + .3],
+    [CHEST[0] - .75, 0, CHEST[1]], [CHEST[0] + .75, 1.65, CHEST[1]], ...boardPts(CHEST[0] + 1.35, CHEST[1] - .2, .05, 1.7, .75, 1.25)], { yaw: Math.PI, pitch: -.36, fov: 32, drift: -.05 }),
+  fitShot([...person(MILL[0] - 1.6, MILL[1] + 8.4), ...person(MILL[0] - .7, MILL[1] + 3.5), ...boardPts(MILL[0] - 3.3, MILL[1] + 4.6, .3, 2.2, 1.2, 1.5),
+    [MILL[0], ground0(...MILL) + 3.2, MILL[1] + 2.6]], { yaw: Math.PI - .12, pitch: .06, fov: 38, bottom: .6 }),
+  fitShot([...person(ROAD_X, EDGE_Z - 3.9), ...person(ROAD_X, EDGE_Z - .75), ...boardPts(...SIGN5, Math.PI - .25, 2.3, .9, 1.45)], { yaw: .14, pitch: -.12, fov: 32 }),
+  fitShot([...person(ROAD_X, EDGE_Z - .75, 2.3), ...person(ROAD_X + 1.3, EDGE_Z - .9, 1.95)], { yaw: Math.PI + .04, pitch: -.08, fov: 28, drift: -.05 }),
+];
+function camAt(t){
+  let i = 0; while (i < SHOT.length - 1 && t >= SHOT[i+1]) i++;
+  const a = CAMS[i], t0 = SHOT[i], t1 = SHOT[i+1] ?? END, u = smooth(t0, t1, t)*.8 + clamp((t - t0)/(t1 - t0), 0, 1)*.2;
+  const L = (p, q) => p.map((v, k) => lerp(v, q[k], u));
+  return { pos: L(a.from.pos, a.to.pos), look: L(a.from.look, a.to.look), fov: lerp(a.from.fov, a.to.fov, u) };
+}
+
+Engine.cast.load(CAST.models).then(Engine.game.fonts).then(() => Engine.create({
+  title: '<em>Feudalism</em>, explained using Fortnite',
+  hud: 'editorial',
+  ariaLabel: 'A cartoon medieval manor: serfs work the lord\'s fields, pay a tithe in coins, use the lord\'s mill and cannot leave without permission',
+  duration: END, tail: .6,
+  seed: 11,
+  fog: [160, 1100], fov: 34, far: 1500,
+  look: { vignette: 0, grain: 0, exposure: .9, saturation: 1.12, contrast: 1.06, bloom: { strength: .35, radius: .45, threshold: 1.1 } },
+  sound: true,
+  samples: ['nature/birds-morning', 'people/crowd-50'],
+
+  setup(ctx){
+    const { THREE, scene, R, pick } = ctx, c = ctx.col, G = Engine.game, med = Engine.med;
+    ctx.camera.near = .1; ctx.camera.updateProjectionMatrix();
+
+    // ---------- ground: grass with a dirt road; the fields are their own fine plane ----------
+    const DIRT = c('#b08a5a');
+    const terrain = G.terrain(ctx, { size: [1000, 1000], center: [0, -150], seg: [150, 150], height: ground, grass: '#4e9a38', dark: '#377f31', dry: '#8fb048',
+      paint: (x, z, y, col) => { if (Math.abs(x - ROAD_X) < 1.7 && z > -12 && z < 75) col.lerp(DIRT, .85); } });
+    // strip fields: each family's narrow strips side by side, grass balks between; the lord's demesne (gold wheat) in the middle
+    const STRIPS = []; for (let x = FX[0]; x < FX[1]; x += 4) STRIPS.push({ x0: x, x1: x + 3.6, crop: x >= 12 && x < 24 ? 'wheat' : pick(['barley', 'peas', 'fallow', 'plough', 'wheat', 'oats']) });
+    const CROP = { wheat: ['#e0b64c', '#c99a32'], barley: ['#e8cf78', '#cdb25c'], oats: ['#c9c070', '#aaa255'], peas: ['#6fae48', '#4f8c36'], fallow: ['#8fa356', '#7a8a48'], plough: ['#8a6440', '#6f4e31'] };
+    const fieldTex = G.canvasTex(1024, 1024, (g, W, H) => {
+      const k = W/(FX[1] - FX[0]), r = Engine.mulberry32(21);
+      g.fillStyle = '#5d9e3e'; g.fillRect(0, 0, W, H);
+      for (const s of STRIPS){ const [a, b] = CROP[s.crop], x0 = (s.x0 - FX[0])*k, w = (s.x1 - s.x0)*k;
+        g.fillStyle = a; g.fillRect(x0, 0, w, H);
+        for (let x = x0 + 4; x < x0 + w - 2; x += 11){ g.fillStyle = b; g.fillRect(x, 0, 4, H); }          // crop rows
+        for (let i = 0; i < 500; i++){ g.fillStyle = `rgba(${r() < .5 ? '255,255,255' : '0,0,0'},.07)`; g.fillRect(x0 + r()*w, r()*H, 2, 6 + r()*10); } }
+    });
+    const fields = new THREE.Mesh(new THREE.PlaneGeometry(FX[1] - FX[0], FZ[1] - FZ[0]), new THREE.MeshStandardMaterial({ map: fieldTex, roughness: .95, envMapIntensity: .4 }));
+    fields.rotation.x = -Math.PI/2; fields.position.set((FX[0] + FX[1])/2, .03, (FZ[0] + FZ[1])/2); fields.receiveShadow = true; scene.add(fields);
+    // standing wheat on the lord's strips near the camera: instanced tufts
+    const tuftGeo = new THREE.ConeGeometry(.055, .48, 5); tuftGeo.translate(0, .24, 0);
+    const TUFTS = []; for (let x = 12.2; x < 23.6; x += .3) for (let z = 3; z < 24; z += .26){ if (Math.hypot(x - PIP_FIELD[0], z - PIP_FIELD[1]) < 1.1) continue; if ((x - 12) % 4 > 3.6) continue; TUFTS.push([x + R(-.08, .08), z + R(-.08, .08)]); }
+    const tufts = new THREE.InstancedMesh(tuftGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85 }), TUFTS.length);
+    const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), E3 = new THREE.Euler(), V = new THREE.Vector3(), SC = new THREE.Vector3(), tc = new THREE.Color();
+    TUFTS.forEach(([x, z], i) => { E3.set(R(-.15, .15), R(0, 6.28), R(-.15, .15)); Q.setFromEuler(E3); const s = R(.8, 1.2);
+      M4.compose(V.set(x, .03, z), Q, SC.set(s, s*R(.85, 1.15), s)); tufts.setMatrixAt(i, M4); tufts.setColorAt(i, tc.copy(c(pick(['#e6bd52', '#d6a83c', '#efc964']))).multiplyScalar(R(.9, 1.1))); });
+    tufts.castShadow = tufts.receiveShadow = true; scene.add(tufts);
+
+    // ---------- the manor: castle on its hill, village, manor house, church, mill, hedges ----------
+    const B = med.builder(ctx);
+    med.castle(B, { x: -34, y: ground(-34, -150) - .5, z: -150, s: .7, yaw: .35, stone: '#a39a8c', stone2: '#8e8578' });
+    const HUTS = [[-8, -6, .3], [-15, 2, 1.2], [-22, -10, .2], [-6, -18, -.4], [-18, -28, .5], [-30, -20, .9], [-12, 12, 1.6], [-26, 10, 1.4], [-4, 26, 1.5], [-14, 30, 1.7], [-36, 2, .6], [-2, -32, -.2]];
+    HUTS.forEach(([x, z, yaw], i) => med.hut(B, { x, y: ground(x, z), z, yaw, s: .95 + (i % 3)*.07, roof: i % 4 === 1 ? '#c99a3e' : '#d8b04e', wall: i % 3 === 2 ? '#e4cfa5' : '#efdfbd' }));
+    med.manor(B, { x: -16, y: ground(-16, -44), z: -44, yaw: .3, s: 1 });
+    med.church(B, { x: -34, y: ground(-34, -4), z: -4, yaw: 1.3, s: 1 });
+    const mill = med.windmill(B, ctx, { x: MILL[0], y: ground(...MILL), z: MILL[1], yaw: 0, s: 1 });
+    for (const [x, z] of [[-1, 6], [-3, -10], [-20, -4], [42, -4], [44, 30]]) med.stack(B, x, ground(x, z), z, .9);
+    // the harvest pile's cart, the Church's tithe chest, sacks at the mill
+    med.cart(B, { x: PILE[0] + 3.2, y: 0, z: PILE[1] - 1.4, yaw: .4, s: .9 });
+    { const F = B.frame(CHEST[0], 0, CHEST[1], .05, 1); B.box(F, 0, .45, 0, 1.4, .9, .9, '#7a4a2a'); B.box(F, 0, .95, 0, 1.5, .18, 1, '#5e3519');
+      for (const x of [-.55, .55]) B.box(F, x, .5, 0, .1, .92, .95, '#c9a54a'); B.box(F, 0, .6, .46, .22, .3, .04, '#c9a54a');
+      B.box(F, 0, 1.45, 0, .08, .8, .08, '#e9c46a'); B.box(F, 0, 1.6, 0, .45, .08, .08, '#e9c46a'); }
+    for (const [x, z] of [[MILL[0] - 2.6, MILL[1] + 3.2], [MILL[0] - 1.9, MILL[1] + 3.6], [MILL[0] - 2.3, MILL[1] + 4.1], [MILL[0] + 1.6, MILL[1] + 3.5]]) med.sack(B, x, ground(x, z), z, 1.1);
+    // hedges between fields and meadow, the fence of the manor's edge (gap for the road)
+    med.fence(B, [[-40, EDGE_Z - 1.5], [ROAD_X - 2.2, EDGE_Z - 1.5]], 1.1, ground);
+    med.fence(B, [[ROAD_X + 2.2, EDGE_Z - 1.5], [46, EDGE_Z - 1.5]], 1.1, ground);
+    B.finish();
+
+    // ---------- trees: woods on the hills, a few in the village, hedgerow bushes ----------
+    const T = [];
+    for (let i = 0; i < 420; i++){ const x = R(-220, 220), z = R(-330, 140); const d = Math.hypot(x - 8, z - 6);
+      if (d < 62 || Math.hypot(x + 34, z + 150) < 30) continue; T.push({ x, z, s: R(1, 1.6), kind: ctx.rnd() < .3 ? 'pine' : 'round', far: d > 85 }); }
+    for (const [x, z] of [[-11, -12], [-24, -2], [-2, -24], [-30, 18], [-10, 22], [-40, -12], [8, -14], [-20, 36]]) T.push({ x, z, s: R(1.1, 1.4), kind: 'round' });
+    for (let z = FZ[0]; z < FZ[1]; z += R(2.5, 4)) T.push({ x: FX[1] + R(.5, 1.5), z, s: R(.8, 1.1), kind: 'bush' });
+    for (let x = FX[0] + 2; x < FX[1]; x += R(2.5, 4)) T.push({ x, z: FZ[0] - R(.5, 1.5), s: R(.8, 1.1), kind: 'bush' });
+    for (let i = 0; i < 40; i++){ const x = R(-30, 40), z = R(38, 70); if (Math.abs(x - ROAD_X) < 3) continue; T.push({ x, z, s: R(.6, 1.1), kind: ctx.rnd() < .6 ? 'flowers' : 'bush' }); }
+    G.trees(ctx, T, ground);
+
+    // ---------- boards: prices in the scene ----------
+    const board = (o, x, z, yaw, lift) => { const b = G.board(ctx, Object.assign({ lift }, o)); b.position.set(x, ground(x, z), z); b.rotation.y = yaw; return b; };
+    board({ w: 2.3, h: 1.55, rows: [{ text: 'THE LORD\'S FIELDS', size: .17, color: '#ffe9b0' }, { text: 'YOUR PRICE:', size: .12, gap: .01 }, { text: '2–3 DAYS', size: .25 }, { text: 'OF WORK A WEEK', size: .13 }] }, 16.9, 7.4, -.55, .9);
+    board({ style: 'paper', w: 1.25, h: .7, posts: false, rows: [{ text: 'YOUR HARVEST', size: .2, color: '#3a2412', stroke: false }, { text: '{c}100', size: .42, color: '#3a2412', stroke: false }] }, PILE[0] + 1.05, PILE[1] + .45, -.25, 0).position.y = .05;
+    board({ w: 1.7, h: 1.25, rows: [{ text: 'TITHE', size: .23, color: '#ffe9b0' }, { text: '–{c}10', size: .34 }, { text: '1/10 TO THE CHURCH', size: .12 }] }, CHEST[0] + 1.35, CHEST[1] - .2, .05, .75);
+    board({ w: 2.2, h: 1.5, rows: [{ text: 'THE LORD\'S MILL', size: .17, color: '#ffe9b0' }, { text: 'GRIND HERE ONLY', size: .14 }, { text: 'FEE: {c} A CUT', size: .2 }, { text: 'OF YOUR GRAIN', size: .14 }] }, MILL[0] - 3.3, MILL[1] + 4.6, .3, 1.2);
+    board({ w: 2.3, h: 1.45, rows: [{ text: 'LEAVING THE MANOR?', size: .15, color: '#ffe9b0' }, { text: 'ASK YOUR LORD', size: .24 }, { text: 'PERMISSION REQUIRED', size: .13 }] }, ...SIGN5, Math.PI - .25, .9);
+    const barrier = G.barrier(ctx, { x0: -60, x1: 60, z: EDGE_Z, h: 9, y: -.2 });
+
+    // ---------- coins: the harvest pile (100), ten of them fly into the chest ----------
+    const coins = G.coins(ctx, 100, .26), PILE_POS = [];
+    for (let i = 0; i < 100; i++){ const a = i*2.39996, r = .62*Math.sqrt((99 - i)/99), y = .06 + (1 - Math.sqrt((99 - i)/99))*.62;
+      PILE_POS.push([PILE[0] + Math.cos(a)*r + R(-.04, .04), y + R(-.02, .02), PILE[1] + Math.sin(a)*r + R(-.04, .04), R(-.5, .5), R(0, 6.3)]); }
+
+    // ---------- people ----------
+    const hand = 'handslot.r';
+    const pip = Engine.cast.make(ctx, Object.assign(CAST.spec('pip', ctx), { keys: [
+      { t: 0, x: PIP_FIELD[0], z: PIP_FIELD[1], yaw: -1.4, act: '1H_Melee_Attack_Chop', loop: true, rate: .8 },
+      { t: SHOT[2] - .02, x: PIP_FIELD[0], z: PIP_FIELD[1], yaw: -1.4 }, { t: SHOT[2], x: PILE[0] - .75, z: PILE[1] - .95, yaw: .35, look: [4.6, 1.2, 9] },
+      { t: SHOT[2] + 1.3, x: PILE[0] - .75, z: PILE[1] - .95, yaw: .2, act: 'Hit_B', look: [CHEST[0], .9, CHEST[1]] },
+      { t: SHOT[3] - .02, x: PILE[0] - .75, z: PILE[1] - .95 }, { t: SHOT[3], x: MILL[0] - 1.6, z: MILL[1] + 8.4 },
+      { x: MILL[0] - .7, z: MILL[1] + 3.5, gait: 'walk', v: 1.75, act: 'idle', look: [MILL[0], 4, MILL[1]] },
+      { t: SHOT[4] - .02, x: MILL[0] - .7, z: MILL[1] + 3.5 }, { t: SHOT[4], x: ROAD_X, z: EDGE_Z - 3.9 },
+      { x: ROAD_X, z: EDGE_Z - .75, gait: 'walk', v: 1.4 }, { t: SHOT[4] + 2.3, x: ROAD_X, z: EDGE_Z - .75, act: 'Hit_A', yaw: 0 },
+      { t: SHOT[5] + .9, x: ROAD_X, z: EDGE_Z - .75, yaw: 0, look: [ROAD_X + 1.4, 1.2, EDGE_Z - 1] },
+      { t: SHOT[5] + 2.2, x: ROAD_X, z: EDGE_Z - .75, yaw: 0, act: 'Cheer', look: [2.9, 1.2, 58] } ], ground }));
+    const hoe = pip.attach(hand, med.tool(ctx, 'hoe'), true), sack = pip.attach(hand, med.tool(ctx, 'sack'), true);
+    const clank = Engine.cast.make(ctx, Object.assign(CAST.spec('clank', ctx), { keys: [
+      { t: 0, x: ROAD_X + 5.2, z: EDGE_Z - 4.4 }, { t: SHOT[4] + 1.4, x: ROAD_X + 5.2, z: EDGE_Z - 4.4 },
+      { x: ROAD_X + 1.3, z: EDGE_Z - .9, gait: 'run', v: 2.6 }, { t: SHOT[5] + .95, x: ROAD_X + 1.3, z: EDGE_Z - .9, yaw: 0, act: 'Blocking' } ], ground }));
+    // serfs at work in the fields, a queue at the tithe chest, carriers at the mill
+    const folk = [], ACTS = [['1H_Melee_Attack_Chop', 'hoe'], ['PickUp', null], ['Interact', null], ['1H_Melee_Attack_Chop', 'pitchfork'], ['Use_Item', 'scythe']];
+    const work = (x, z, k) => { const [act, tool] = ACTS[k % ACTS.length];
+      const f = Engine.cast.make(ctx, Object.assign(CAST.extra(ctx), { keys: [{ t: 0, x, z, yaw: R(-3.1, 3.1), act, loop: true, rate: R(.7, .95) }], ground }));
+      if (tool) f.attach(hand, med.tool(ctx, tool), true); folk.push(f); };
+    for (let i = 0; i < 34; i++){ const x = R(FX[0] + 1, FX[1] - 1), z = R(FZ[0] + 2, FZ[1] - 2); if (Math.hypot(x - PIP_FIELD[0], z - PIP_FIELD[1]) < 2.2 || Math.hypot(x - PILE[0], z - PILE[1]) < 5.5) continue; work(x, z, i); }   // clear of Pip and of the tithe shot
+    for (const [x, z] of [[16.5, 9.5], [11.4, 8.6], [17.8, 13.2], [19.5, 7.2]]) work(x, z, folk.length);       // behind Pip, in her shot
+    for (let i = 0; i < 3; i++){ const f = Engine.cast.make(ctx, Object.assign(CAST.extra(ctx), { keys: [{ t: 0, x: CHEST[0] + .3 + i*.3, z: CHEST[1] - 1.2 - i*1.05, yaw: Math.PI, look: [CHEST[0], .8, CHEST[1]] }], ground }));
+      f.attach(hand, med.tool(ctx, 'sack'), true); folk.push(f); }
+    for (let i = 0; i < 9; i++){ const z0 = R(-14, 30), x0 = R(-30, -2), dir = ctx.rnd() < .5 ? -1 : 1;
+      folk.push(Engine.cast.make(ctx, Object.assign(CAST.extra(ctx), { keys: [{ t: 0, x: x0, z: z0 }, { x: x0 + dir*R(6, 12), z: z0 + R(-4, 4), gait: 'walk', v: R(.6, .85) }], ground }))); }
+    const carriers = [[MILL[0] - 8, MILL[1] + 1, MILL[0] - 2.4, MILL[1] + 2.8], [MILL[0] + 9, MILL[1] + 4, MILL[0] + 1.8, MILL[1] + 3.1]].map(([x, z, x1, z1]) => {
+      const f = Engine.cast.make(ctx, Object.assign(CAST.extra(ctx), { keys: [{ t: 0, x, z }, { t: SHOT[3] + 3.2, x: x1, z: z1, gait: 'walk', act: 'PickUp' }], ground }));
+      f.attach(hand, med.tool(ctx, 'sack'), true); return f; });
+    folk.push(...carriers);
+
+    const pass = document.createElement('div'); pass.className = 'pass';
+    pass.innerHTML = '<div class="top"><b>Peasant Pass</b><span>Tier 1 / ∞</span></div><div class="track">' + '<i></i>'.repeat(10) + '</div><div class="sub">Season: the rest of your life</div>';
+    ctx.stage.appendChild(pass);
+    const sky = { clouds: Engine.fx.clouds(ctx, { count: 14, height: [80, 140], spread: 700, center: [0, 0, -250], size: [80, 160] }),
+      birds: Engine.fx.birds(ctx, { count: 16, center: [0, 45, -60], radius: [15, 60] }) };
+
+    return Object.assign({ terrain, pip, clank, folk, hoe, sack, mill, coins, PILE_POS, barrier, pass,
+      captions: G.captions(ctx, LINES), bars: G.bars(ctx), M4, Q, E3, V, SC }, sky);
+  },
+
+  update(ctx, t, dt){
+    const S = ctx.state, cam = camAt(t);
+    ctx.camera.position.set(...cam.pos); ctx.camera.lookAt(...cam.look);
+    if (ctx.camera.fov !== cam.fov){ ctx.camera.fov = cam.fov; ctx.camera.updateProjectionMatrix(); }
+    const shot = SHOT.filter(s => t >= s).length - 1;
+    ctx.aimSun(cam.look[0], cam.look[2], [-34, 52, 46]);
+    ctx.look.setSky(ctx.col('#c4e6ff'), ctx.col('#2f86e8'));
+
+    S.pip.update(t); S.clank.update(t);
+    for (const f of S.folk) f.update(t);
+    S.hoe.visible = t < SHOT[2]; S.sack.visible = t >= SHOT[3] && t < SHOT[4];
+    S.mill.userData.spin.rotation.z = -t*.7;
+    S.clouds.update(t, { wind: 1.6 }); S.birds.update(t);
+
+    // the tithe: from 8.3 s, coins leave the top of the pile one by one and arc into the chest
+    const { M4, Q, E3, V, SC } = S;
+    for (let i = 0; i < 100; i++){
+      const p = S.PILE_POS[i], k = 99 - i, t0 = SHOT[2] + .8 + k*.17;
+      let x = p[0], y = p[1], z = p[2], rx = p[3], ry = p[4];
+      if (k < 10 && t > t0){ const u = clamp((t - t0)/.62, 0, 1), e = u*u*(3 - 2*u);
+        x = lerp(p[0], CHEST[0], e); z = lerp(p[2], CHEST[1], e); y = lerp(p[1], 1.0, e) + 1.6*Math.sin(Math.PI*u); rx += u*9; ry += u*4;
+        if (u >= 1) y = -5;
+        if (t - dt < t0) ctx.audio.hit('knock', { pitch: 3.4, ring: .7, strength: .35 }); }
+      E3.set(rx, ry, 0); Q.setFromEuler(E3); M4.compose(V.set(x, y, z), Q, SC.set(1, 1, 1)); S.coins.setMatrixAt(i, M4);
+    }
+    S.coins.instanceMatrix.needsUpdate = true;
+
+    S.barrier.set(shot === 4 ? 1 : shot === 5 ? .45 : 0, t);
+    // Pip's bars: the lord's protection fills her shield
+    const head = S.pip.root.position; S.bars.set(0, { show: smooth(SHOT[5] + .3, SHOT[5] + .7, t)*(t < END + .5 ? 1 : 0), name: 'Pip Turnip',
+      at: new THREE.Vector3(head.x, head.y + 1.85, head.z), hp: 100, shield: 100*smooth(SHOT[5] + 1.6, SHOT[5] + 2.5, t) });
+    // the pass bar over the wide shot: tier 1 of infinity
+    const pk = smooth(1.2, 1.6, t)*(1 - smooth(SHOT[1] - .25, SHOT[1], t));
+    S.pass.style.opacity = pk.toFixed(3); S.pass.hidden = pk <= 0;
+    S.pass.querySelector('.track i').classList.add('on');
+    S.captions.update(t);
+
+    ctx.audio.set('nature/birds-morning', .42);
+    ctx.audio.set('people/crowd-50', shot < 3 ? .14 : 0);
+    if (shot >= 4) ctx.audio.set('wind', .25); else ctx.audio.set('wind', 0);
+    for (const s of SHOT.slice(1)) if (t >= s && t - dt < s) ctx.audio.hit('whoosh', { strength: .25 });
+    return {};
+  },
+}));
+</script>
+</body>
+</html>
