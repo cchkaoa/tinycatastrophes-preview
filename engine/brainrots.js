@@ -103,7 +103,9 @@
     // a stocky great white, not a mako: deep body, mass forward, blunt conical snout, thin tail stalk
     const L = 1.62, Z0 = -.86;   // tail stalk at z = -.86, snout tip at z = .76
     const W = u => u <= .58 ? .045 + .215*Math.pow(Math.sin(Math.PI/2*clamp((u - .04)/.54, 0, 1)), 1.25) : Math.max(.02, .26*Math.pow(Math.cos(Math.PI/2*(u - .58)/.42), .55));
-    const sec = u => { const w = W(u); return { w, ht: 1.3*w, hb: (1.15 - .15*smooth(.75, 1, u))*w, y: .04*Math.sin(Math.PI*u) + .02*smooth(.85, 1, u) }; };
+    const UC = .73, UF = .9;   // the mouth: from its corners (UC, under the eye) to the front of the lower jaw (UF)
+    const sec = u => { const w = W(u); return { w, ht: 1.3*w, hb: (1.15 - .15*smooth(.75, 1, u))*w - .055*smooth(UC - .04, UC + .05, u)*(1 - smooth(UF - .05, UF + .03, u)),
+      y: .04*Math.sin(Math.PI*u) + .02*smooth(.85, 1, u) }; };
     const tmp = new THREE.Color(), sp = E.mulberry32(9);
     // countershading: dark back, bright flank, white belly below a slightly wavy line, a faint speckle
     const shade = (x, y, z, th, u) => { const a = Math.min(th, Math.PI*2 - th), edge = 1.8 + .035*Math.sin(u*23) + .015*Math.sin(u*61);
@@ -123,16 +125,26 @@
         const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, .0065 - k*.0004, 6), new THREE.MeshStandardMaterial({ color: SLIT, roughness: .6 })); body.add(m); }
       put([[SPH, surf(.965, s*2.2, .99), [0, 0, 0], [.012, .008, .02], SLIT]], body, skin);
     }
-    // the grin: a dark mouth under the snout, gum, a row of upper teeth and (on the chomping jaw) lower teeth
-    const mouthAt = (k, out = 1.0) => { const a = Math.PI + (k - .5)*2*1.2, u = .76 + .1*Math.cos((k - .5)*Math.PI); return surf(u, a, out); };
-    const rim = new THREE.CatmullRomCurve3([...Array(9)].map((_, i) => new THREE.Vector3(...mouthAt(i/8, 1.003))));
-    put([[SPH, surf(.8, Math.PI, .88), 0, [.15, .045, .11], CAV]], body, mouthM);
-    const gum = new THREE.Mesh(new THREE.TubeGeometry(rim, 40, .012, 8), new THREE.MeshStandardMaterial({ color: GUM, roughness: .5 })); body.add(gum);
-    const tUp = []; for (let k = 0; k < 17; k++){ const p = rim.getPoint(.03 + k*.059); tUp.push([C(0, .016, 4), [p.x*.985, p.y - .022, p.z - .004], [Math.PI, 0, 0], [1, .046, .55], WHITE]); }
-    put(tUp, body, glossy);
-    const jaw = grp(body, 0, 0, 0), tLo = [];
-    for (let k = 0; k < 13; k++){ const p = rim.getPoint(.08 + k*.07); tLo.push([C(0, .013, 4), [p.x*.9, p.y - .04, p.z - .035], 0, [1, .036, .55], WHITE]); }
-    put(tLo, jaw, glossy);
+    // the mouth: a separate lower jaw hinged at the corners, slightly open in a grin; a dark throat and tongue between
+    // the jaws, and a U-shaped row of triangular teeth on each jaw
+    const under = u => { const q = sec(u); return q.y - q.hb; }, zAt = u => Z0 + u*L;
+    const hinge = [0, under(UC) - .004, zAt(UC)];
+    const jaw = grp(body, ...hinge);
+    const jawU = v => UC + (UF - UC)*v;
+    const jawGeo = loft((UF - UC)*L, zAt(UC), v => { const u = jawU(v), cap = v <= 0 || v >= 1 ? 0 : 1;
+        return { w: cap*.9*W(u)*Math.pow(Math.sin(Math.PI*Math.min(1, v*1.6 + .05)), .35), ht: cap*.012, hb: cap*.075*Math.pow(Math.sin(Math.PI*v), .55), y: under(u) - .016 }; },
+      (x, y, z, th) => { const a = Math.min(th, Math.PI*2 - th); return (a < 1.0 ? tmp.copy(CAV) : a < 1.35 ? tmp.copy(GUM) : tmp.copy(BELLY).lerp(SIDE, .12*smooth(1.5, 1.35, a))).clone(); }, 24, 40, 2.1);
+    jawGeo.translate(-hinge[0], -hinge[1], -hinge[2]);
+    const jm = new THREE.Mesh(jawGeo, skin); jm.castShadow = jm.receiveShadow = true; jaw.add(jm);
+    put([[SPH, [0, under(.8) + .024, zAt(.8)], 0, [.68*W(.8), .034, .13], CAV]], body, mouthM);                      // throat, seen only through the gap
+    put([[SPH, [0, under(.8) - .006 - hinge[1], zAt(.8) - hinge[2]], 0, [.5*W(.8), .016, .1], c('#c94861')]], jaw, mouthM);   // tongue, on the jaw's floor
+    const rimPt = (sgn, k, lower) => { const u = UF - (UF - UC)*Math.pow(k, 1.25), x = sgn*k*(lower ? .78 : .86)*W(u);
+      return [x, under(u) + (lower ? -.02 : .014), zAt(u) - (lower ? .01 : .004)]; };
+    const tUp = [], tLo = [];
+    for (let i = -8; i <= 8; i++){ const k = Math.abs(i)/8.4, sgn = i < 0 ? -1 : 1, big = 1 - .45*k;
+      const p = rimPt(sgn, k, false); tUp.push([C(0, .025*big, 4), p, [Math.PI, Math.atan2(p[0], .2), 0], [1, .066*big, .45], WHITE]);
+      if (Math.abs(i) <= 7){ const q = rimPt(sgn, k, true); tLo.push([C(0, .021*big, 4), [q[0], q[1] - hinge[1], q[2] - hinge[2]], [0, Math.atan2(q[0], .2), 0], [1, .054*big, .45], WHITE]); } }
+    put(tUp, body, glossy); put(tLo, jaw, glossy);
     // fins: thin and sharp. Dorsal (falcate), second dorsal, pectorals (long sickles), pelvics, anal, tail (lunate) + keels
     const thin = (pts, d = .022) => plate(pts, d, .005);
     const FIN = (x, y) => tmp.copy(BLUE).lerp(TOP, smooth(.2, .5, y)).clone();
@@ -170,7 +182,7 @@
       body.position.y = .86 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .01*Math.sin(t*2.1);
       body.rotation.set(.04*a*dir - .1*sur, 0, .05*a*Math.sin(f*.5));
       tail.rotation.y = (.35*a + .18)*Math.sin(t*(4 + 6*a)) + (st.wag || 0)*.6*Math.sin(t*14);
-      const ch = st.chomp || 0; jaw.position.set(0, -.035*ch*Math.abs(Math.sin(t*9)), 0);
+      const ch = st.chomp || 0; jaw.rotation.x = .13 + .1*sur + .32*ch*Math.abs(Math.sin(t*8));   // a grin at rest, snapping when chomping
       if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); body.rotation.y = clamp(Math.atan2(v.x, v.z), -.35, .35); }
     } };
   }
