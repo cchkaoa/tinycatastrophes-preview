@@ -77,12 +77,16 @@
   // ---------- Tralalero Tralala: a blue shark on three legs in sneakers ----------
   // body lofted from cross-sections (not a lathe): sec(u) gives half-width w, height above (ht) and below (hb) the centre
   // line at y; u runs from the tail stalk (0) to the snout tip (1). Superellipse rings (n = 2.2) keep it sleek, not round.
-  function loft(L, z0, sec, color, nU = 72, nV = 48, n = 2.2){
+  // opts.us: the rings' u values (default nU + 1 evenly spaced); opts.clip(u) -> {lo, hi}: y is clamped into that range
+  // (a flat cut, e.g. a mouth), and color(x, y, z, th, u, cut) learns whether the point was clamped
+  function loft(L, z0, sec, color, nU = 72, nV = 48, n = 2.2, opts = {}){
     const P = [], Cc = [], I = [], e = 2/n, sg = v => v < 0 ? -1 : 1;
-    for (let i = 0; i <= nU; i++){ const u = i/nU, s = sec(u), z = z0 + u*L;
+    const us = opts.us || [...Array(nU + 1)].map((_, i) => i/nU); nU = us.length - 1;
+    for (const u of us){ const s = sec(u), z = z0 + u*L, cl = opts.clip ? opts.clip(u) : null;
       for (let j = 0; j <= nV; j++){ const th = j/nV*Math.PI*2, sn = Math.sin(th), cs = Math.cos(th);
-        const x = s.w*sg(sn)*Math.pow(Math.abs(sn), e), y = s.y + (cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e);
-        P.push(x, y, z); const c = color(x, y, z, th, u); Cc.push(c.r, c.g, c.b); } }
+        const x = s.w*sg(sn)*Math.pow(Math.abs(sn), e); let y = s.y + (cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e), cut = false;
+        if (cl){ if (cl.lo != null && y < cl.lo){ y = cl.lo; cut = true; } if (cl.hi != null && y > cl.hi){ y = cl.hi; cut = true; } }
+        P.push(x, y, z); const c = color(x, y, z, th, u, cut); Cc.push(c.r, c.g, c.b); } }
     for (let i = 0; i < nU; i++) for (let j = 0; j < nV; j++){ const a = i*(nV + 1) + j, b = a + nV + 1; I.push(a, b, a + 1, a + 1, b, b + 1); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
     g.setIndex(I); g.computeVertexNormals();
@@ -103,15 +107,22 @@
     // a stocky great white, not a mako: deep body, mass forward, blunt conical snout, thin tail stalk
     const L = 1.62, Z0 = -.86;   // tail stalk at z = -.86, snout tip at z = .76
     const W = u => u <= .58 ? .045 + .215*Math.pow(Math.sin(Math.PI/2*clamp((u - .04)/.54, 0, 1)), 1.25) : Math.max(.02, .26*Math.pow(Math.cos(Math.PI/2*(u - .58)/.42), .55));
-    const UC = .73, UF = .9;   // the mouth: from its corners (UC, under the eye) to the front of the lower jaw (UF)
-    const sec = u => { const w = W(u); return { w, ht: 1.3*w, hb: (1.15 - .15*smooth(.75, 1, u))*w - .055*smooth(UC - .04, UC + .05, u)*(1 - smooth(UF - .05, UF + .03, u)),
-      y: .04*Math.sin(Math.PI*u) + .02*smooth(.85, 1, u) }; };
+    const sec = u => { const w = W(u); return { w, ht: 1.3*w, hb: (1.15 - .15*smooth(.75, 1, u))*w, y: .04*Math.sin(Math.PI*u) + .02*smooth(.85, 1, u) }; };
+    // the mouth line: from the corners (UC, low on the sides behind the eye) forward and down to the chin (UF). The head is
+    // cut flat along it: above is the head (its cut face is the palate), below is the lower jaw, hinged at the corners
+    const UC = .76, UF = .93, EPS = .0015;
+    const cutY = u => { const q = sec(u), v = clamp((u - UC)/(UF - UC), 0, 1); return q.y - q.hb + (.06 + .5*Math.pow(1 - v, 1.2))*q.hb; };
+    const rimX = u => { const q = sec(u), d = Math.min(1, Math.abs((cutY(u) - q.y)/q.hb)); return q.w*Math.pow(1 - Math.pow(d, 2.05), 1/2.05); };
+    const inMouth = u => u > UC && u < UF;
     const tmp = new THREE.Color(), sp = E.mulberry32(9);
     // countershading: dark back, bright flank, white belly below a slightly wavy line, a faint speckle
     const shade = (x, y, z, th, u) => { const a = Math.min(th, Math.PI*2 - th), edge = 1.8 + .035*Math.sin(u*23) + .015*Math.sin(u*61);
       tmp.copy(TOP).lerp(BLUE, smooth(.15, .9, a)).lerp(SIDE, smooth(1.1, 1.65, a)).lerp(BELLY, smooth(edge - .07, edge + .07, a));
       return tmp.clone().multiplyScalar(.97 + .06*sp()); };
-    const bodyGeo = loft(L, Z0, u => { const q = sec(u); if (u <= 0 || u >= 1){ q.w = q.ht = q.hb = 0; } return q; }, shade, 72, 48, 2.05);   // closed at both ends
+    const US = [...Array(73)].map((_, i) => i/72).filter(u => Math.abs(u - UC) > .004).concat([UC - EPS, UC - EPS/3, UC + EPS]).sort((a, b) => a - b);
+    const lip = (x, y, z, th, u, cut) => cut ? tmp.copy(BELLY).multiplyScalar(.97 + .06*sp()).clone() : shade(x, y, z, th, u);   // cut faces: belly white, a clean lip edge
+    const bodyGeo = loft(L, Z0, u => { const q = sec(u); if (u <= 0 || u >= 1){ q.w = q.ht = q.hb = 0; } return q; },   // closed at both ends
+      lip, 72, 48, 2.05, { us: US, clip: u => inMouth(u) ? { lo: cutY(u) } : null });
     const bm = new THREE.Mesh(bodyGeo, skin); bm.castShadow = bm.receiveShadow = true; body.add(bm);
     // a point on the skin at u along the body, angle th round it (0 = top, PI = belly), pushed out by k
     const surf = (u, th, k = 1) => { const s = sec(u), e = 2/2.05, sn = Math.sin(th), cs = Math.cos(th), sg = v => v < 0 ? -1 : 1;
@@ -125,25 +136,43 @@
         const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, .0065 - k*.0004, 6), new THREE.MeshStandardMaterial({ color: SLIT, roughness: .6 })); body.add(m); }
       put([[SPH, surf(.965, s*2.2, .99), [0, 0, 0], [.012, .008, .02], SLIT]], body, skin);
     }
-    // the mouth: a separate lower jaw hinged at the corners, slightly open in a grin; a dark throat and tongue between
-    // the jaws, and a U-shaped row of triangular teeth on each jaw
-    const under = u => { const q = sec(u); return q.y - q.hb; }, zAt = u => Z0 + u*L;
-    const hinge = [0, under(UC) - .004, zAt(UC)];
+    // the lower jaw: the same skin below the mouth line (so it closes without a seam), its top face the floor of the
+    // mouth with a gum edge; capped at the hinge and the chin. Teeth: a U of triangles on each jaw, on the gum line
+    const zAt = u => Z0 + u*L, hinge = [0, sec(UC).y - sec(UC).hb, zAt(UC)];   // hinged at the bottom: it opens forward, never off the chin
     const jaw = grp(body, ...hinge);
-    const jawU = v => UC + (UF - UC)*v;
-    const jawGeo = loft((UF - UC)*L, zAt(UC), v => { const u = jawU(v), cap = v <= 0 || v >= 1 ? 0 : 1;
-        return { w: cap*.9*W(u)*Math.pow(Math.sin(Math.PI*Math.min(1, v*1.6 + .05)), .35), ht: cap*.012, hb: cap*.075*Math.pow(Math.sin(Math.PI*v), .55), y: under(u) - .016 }; },
-      (x, y, z, th) => { const a = Math.min(th, Math.PI*2 - th); return (a < 1.0 ? tmp.copy(CAV) : a < 1.35 ? tmp.copy(GUM) : tmp.copy(BELLY).lerp(SIDE, .12*smooth(1.5, 1.35, a))).clone(); }, 24, 40, 2.1);
+    const JU = [UC + EPS*.5, UC + EPS*.75, ...[...Array(25)].map((_, i) => UC + EPS + (UF - UC - 2*EPS)*i/24), UF - EPS*.5];   // [cap, dark ring, skin...]
+    const jawGeo = loft(L, Z0, u => { const q = sec(u); if (u === JU[0] || u === JU[JU.length - 1]){ q.y = (cutY(u) + q.y - q.hb)/2; q.w = q.ht = q.hb = 0; } return q; },
+      (x, y, z, th, u, cut) => u <= JU[1] ? CAV.clone().multiplyScalar(.6) : lip(x, y, z, th, u, cut), 0, 40, 2.05, { us: JU, clip: u => ({ hi: cutY(u) }) });
     jawGeo.translate(-hinge[0], -hinge[1], -hinge[2]);
     const jm = new THREE.Mesh(jawGeo, skin); jm.castShadow = jm.receiveShadow = true; jaw.add(jm);
-    put([[SPH, [0, under(.8) + .024, zAt(.8)], 0, [.68*W(.8), .034, .13], CAV]], body, mouthM);                      // throat, seen only through the gap
-    put([[SPH, [0, under(.8) - .006 - hinge[1], zAt(.8) - hinge[2]], 0, [.5*W(.8), .016, .1], c('#c94861')]], jaw, mouthM);   // tongue, on the jaw's floor
-    const rimPt = (sgn, k, lower) => { const u = UF - (UF - UC)*Math.pow(k, 1.25), x = sgn*k*(lower ? .78 : .86)*W(u);
-      return [x, under(u) + (lower ? -.02 : .014), zAt(u) - (lower ? .01 : .004)]; };
+    // the inside of the mouth: separate plates with exact edges (painting it on the skin smeared red over the lips).
+    // palate under the head's cut, floor on the jaw's cut (both dark with a pink gum band), and the back of the throat
+    const inside = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    function plate2(rows, dy, inset, dz = [0, 0, 0]){   // rows: [u...] -> a flat strip between the rims, gum band at the edges
+      const P = [], Cc = [], I = [], push = (x, y, z, col) => { P.push(x - dz[0], y - dz[1], z - dz[2]); Cc.push(col.r, col.g, col.b); };
+      rows.forEach(u => { const xr = Math.max(0, rimX(u) - inset), b = Math.min(.016, xr*.45), y = cutY(u) + dy, z = zAt(u);
+        [[-xr, GUM], [-xr + b, GUM], [-xr + b, CAV], [xr - b, CAV], [xr - b, GUM], [xr, GUM]].forEach(([x, col]) => push(x, y, z, col)); });
+      for (let r = 0; r < rows.length - 1; r++) for (const k of [0, 2, 4]){ const a = r*6 + k, b = a + 6; I.push(a, b, a + 1, a + 1, b, b + 1); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
+      g.setIndex(I); g.computeVertexNormals(); return g; }
+    const rows = JU.slice(2, -1);
+    body.add(new THREE.Mesh(plate2(rows, -.0015, 0), inside));
+    jaw.add(new THREE.Mesh(plate2(rows, .0015, .003, hinge), inside));
+    { const u = UC + EPS, q = sec(u), yc = cutY(u), xr = rimX(u), z = zAt(u) + .0008, P = [0, yc - .02, z], I = [], Cc = [CAV.r, CAV.g, CAV.b];   // the throat wall
+      for (let i = 0; i <= 24; i++){ const x = -xr + 2*xr*i/24, d = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x/q.w), 2.05)), 1/2.05);
+        P.push(x, Math.min(yc, q.y - q.hb*d), z); Cc.push(CAV.r*.7, CAV.g*.7, CAV.b*.7); if (i) I.push(0, i, i + 1); }
+      for (let i = 0; i <= 24; i++){ P.push(-xr + 2*xr*i/24, yc, z); Cc.push(CAV.r, CAV.g, CAV.b); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
+      for (let i = 0; i < 24; i++) I.push(1 + i, 26 + i, 2 + i, 2 + i, 26 + i, 27 + i);
+      g.setIndex(I); body.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: CAV.clone().multiplyScalar(.45), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }))); }
+    const uMid = (UC + UF)/2;
+    put([[SPH, [0, cutY(uMid) + .002 - hinge[1], zAt(uMid) - hinge[2]], 0, [.5*rimX(uMid), .016, .28*(zAt(UF) - zAt(UC))], c('#c94861')]], jaw, mouthM);   // tongue, on the floor
     const tUp = [], tLo = [];
-    for (let i = -8; i <= 8; i++){ const k = Math.abs(i)/8.4, sgn = i < 0 ? -1 : 1, big = 1 - .45*k;
-      const p = rimPt(sgn, k, false); tUp.push([C(0, .025*big, 4), p, [Math.PI, Math.atan2(p[0], .2), 0], [1, .066*big, .45], WHITE]);
-      if (Math.abs(i) <= 7){ const q = rimPt(sgn, k, true); tLo.push([C(0, .021*big, 4), [q[0], q[1] - hinge[1], q[2] - hinge[2]], [0, Math.atan2(q[0], .2), 0], [1, .054*big, .45], WHITE]); } }
+    for (let i = 0; i < 9; i++){ const k = i/8, u = UF - .006 - (UF - UC - .03)*k, big = 1 - .5*k, yaw = Math.atan2(rimX(u), .25);
+      for (const sg of [-1, 1]){
+        tUp.push([C(0, .0135*big, 6), [sg*(rimX(u) - .005), cutY(u) - .021*big, zAt(u)], [Math.PI, sg*yaw, -sg*.12], [1, .05*big, .55], WHITE]);   // on the lip edge: an overbite
+        if (i > 0 && i < 8) tLo.push([C(0, .012*big, 6), [sg*(rimX(u) - .024), cutY(u) + .019*big - hinge[1], zAt(u) - .006 - hinge[2]], [0, sg*yaw, 0], [1, .046*big, .55], WHITE]); } }
+    tUp.push([C(0, .013, 6), [0, cutY(UF - .003) - .02, zAt(UF - .003) + .004], [Math.PI, 0, 0], [1, .046, .55], WHITE]);
     put(tUp, body, glossy); put(tLo, jaw, glossy);
     // fins: thin and sharp. Dorsal (falcate), second dorsal, pectorals (long sickles), pelvics, anal, tail (lunate) + keels
     const thin = (pts, d = .022) => plate(pts, d, .005);
@@ -182,7 +211,7 @@
       body.position.y = .86 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .01*Math.sin(t*2.1);
       body.rotation.set(.04*a*dir - .1*sur, 0, .05*a*Math.sin(f*.5));
       tail.rotation.y = (.35*a + .18)*Math.sin(t*(4 + 6*a)) + (st.wag || 0)*.6*Math.sin(t*14);
-      const ch = st.chomp || 0; jaw.rotation.x = .13 + .1*sur + .32*ch*Math.abs(Math.sin(t*8));   // a grin at rest, snapping when chomping
+      const ch = st.chomp || 0; jaw.rotation.x = .1 + .1*sur + .34*ch*Math.abs(Math.sin(t*8));   // a grin at rest, snapping when chomping
       if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); body.rotation.y = clamp(Math.atan2(v.x, v.z), -.35, .35); }
     } };
   }
