@@ -3,12 +3,13 @@
 
    Engine.fx.brainrot(ctx, kind, o) -> { object, update(t, st), height }
      kind 'sahur'       Tung Tung Tung Sahur (Engine.fx.sahur, ~1.5 m here): st {speed, dir, look, surprise, raise, swing, jump, lean}
-          'tralalero'   Tralalero Tralala: a blue shark on three legs in sneakers, ~1.55 m to the fin tip
+          'tralalero'   Tralalero Tralala: a blue shark (lofted body, countershading, gills, grin) on three legs in sneakers,
+                        ~1.55 m to the fin tip
                         st {speed, dir, look, surprise, chomp, jump, wag}
           'bombardiro'  Bombardiro Crocodilo: a crocodile that is a twin-engine bomber, 3.8 m wingspan
                         st {alt (m above y), bank, pitch, chomp, bombs (how many still hang, 0..2), prop (0..1 engine power)}
-          'ballerina'   Ballerina Cappuccina: a ballerina whose head is a cappuccino on its saucer, ~1.65 m
-                        st {speed, dir, arms (0 low .. 1 en haut), spin (radians), pirouette (0..1: on pointe, one leg in passé), jump}
+          'ballerina'   Ballerina Cappuccina: a ballerina whose head is a cappuccino on its saucer, with a face on the cup, ~1.7 m
+                        st {speed, dir, arms (0 low .. 1 en haut), spin (radians), pirouette (0..1: on pointe, one leg in passé), jump, surprise}
      o.height rescales the character (metres; default as above).
    Engine.fx.brainrot.track(keys) -> at(t) = { x, y, z, yaw, speed, moving }   keys [{t | v, x, z, y, yaw}] like fx.people:
      travel between keys at different spots (straight, constant speed), hold between keys at the same spot; facing follows
@@ -29,9 +30,9 @@
       _e.set(rr[0], rr[1], rr[2], 'YXZ'); _q.setFromEuler(_e);
       _m.compose(_p.set(...(p || [0, 0, 0])), _q, _s.set(...sc));
       const g = (src.index ? src.toNonIndexed() : src.clone()).applyMatrix4(_m);
-      if (sc[0]*sc[1]*sc[2] < 0){ const a = g.attributes.position.array;   // mirrored part: restore the winding
-        for (let i = 0; i < a.length; i += 9) for (let k = 0; k < 3; k++){ const t = a[i+3+k]; a[i+3+k] = a[i+6+k]; a[i+6+k] = t; } }
-      g.computeVertexNormals();
+      if (!g.attributes.normal) g.computeVertexNormals();
+      if (sc[0]*sc[1]*sc[2] < 0) for (const a of [g.attributes.position.array, g.attributes.normal.array])   // mirrored part: restore the winding
+        for (let i = 0; i < a.length; i += 9) for (let k = 0; k < 3; k++){ const t = a[i+3+k]; a[i+3+k] = a[i+6+k]; a[i+6+k] = t; }
       const pa = g.attributes.position.array, na = g.attributes.normal.array;
       for (let i = 0; i < pa.length; i += 3){
         P.push(pa[i], pa[i+1], pa[i+2]); N.push(na[i], na[i+1], na[i+2]);
@@ -73,57 +74,102 @@
       l.an.rotation.x = -l.hp.rotation.x - l.kn.rotation.x; });
   }
 
-  // ---------- Tralalero Tralala: blue shark, three legs, sneakers ----------
+  // ---------- Tralalero Tralala: a blue shark on three legs in sneakers ----------
+  // body lofted from cross-sections (not a lathe): sec(u) gives half-width w, height above (ht) and below (hb) the centre
+  // line at y; u runs from the tail stalk (0) to the snout tip (1). Superellipse rings (n = 2.2) keep it sleek, not round.
+  function loft(L, z0, sec, color, nU = 72, nV = 48, n = 2.2){
+    const P = [], Cc = [], I = [], e = 2/n, sg = v => v < 0 ? -1 : 1;
+    for (let i = 0; i <= nU; i++){ const u = i/nU, s = sec(u), z = z0 + u*L;
+      for (let j = 0; j <= nV; j++){ const th = j/nV*Math.PI*2, sn = Math.sin(th), cs = Math.cos(th);
+        const x = s.w*sg(sn)*Math.pow(Math.abs(sn), e), y = s.y + (cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e);
+        P.push(x, y, z); const c = color(x, y, z, th, u); Cc.push(c.r, c.g, c.b); } }
+    for (let i = 0; i < nU; i++) for (let j = 0; j < nV; j++){ const a = i*(nV + 1) + j, b = a + nV + 1; I.push(a, b, a + 1, a + 1, b, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Cc, 3));
+    g.setIndex(I); g.computeVertexNormals();
+    const N = g.attributes.normal;   // close the seam: average the normals of the first and last column of every ring
+    for (let i = 0; i <= nU; i++){ const a = i*(nV + 1), b = a + nV; _p.set(N.getX(a) + N.getX(b), N.getY(a) + N.getY(b), N.getZ(a) + N.getZ(b)).normalize();
+      N.setXYZ(a, _p.x, _p.y, _p.z); N.setXYZ(b, _p.x, _p.y, _p.z); }
+    return g;
+  }
+  // a limb along -y from its joint: radius r0 at the top to r1 at the bottom, a muscle bulge in between
+  function limb(len, r0, r1, bulge = 0, seg = 16){
+    const pts = []; for (let i = 0; i <= 12; i++){ const v = i/12; pts.push(new THREE.Vector2(Math.max(1e-3, r0 + (r1 - r0)*v + bulge*Math.sin(Math.PI*Math.min(1, v*1.15)) - (v === 1 ? r1*.6 : 0) - (v === 0 ? r0*.6 : 0)), -v*len)); }
+    return new THREE.LatheGeometry(pts.reverse(), seg);
+  }
   function tralalero(ctx, o){
-    const c = ctx.col, root = new THREE.Group(), body = grp(root, 0, .9, 0);
-    const BLUE = c('#3a86dc'), DEEP = c('#2a62b8'), BELLY = c('#eef4f8'), DARK = c('#173a6a'), WHITE = c('#ffffff'), GUM = c('#c2414f');
-    const skin = MAT({ roughness: .38 }), shoeM = MAT({ roughness: .6 }), glossy = MAT({ roughness: .08 });
-    const L = 1.6, Z0 = -.88;   // body from the tail stalk (z = -.88) to the nose (z = .72)
-    const R = u => { const base = .045 + .235*Math.pow(Math.sin(Math.min(1, u/.6)*Math.PI/2), 1.15), nose = u > .7 ? Math.sqrt(Math.max(0, 1 - Math.pow((u - .7)/.3, 2))) : 1; return base*Math.max(nose, .02); };
-    const tmp = new THREE.Color(), shade = (x, y, z) => tmp.copy(BELLY).lerp(BLUE, smooth(-.11, .04, y)).lerp(DEEP, smooth(.12, .26, y)).clone();
-    put([[lathe(R, L), [0, 0, Z0], 0, [1, 1.12, 1], shade]], body, skin);
-    // a point on the body's surface: z along the body, angle round it from the top (0) to the belly (PI), pushed out by k
-    const surf = (z, ang, k = 1) => { const r = R((z - Z0)/L)*k; return [r*Math.sin(ang), 1.12*r*Math.cos(ang), z]; };
-    // eyes, gills, nostrils
+    const c = ctx.col, root = new THREE.Group(), body = grp(root, 0, .94, 0);
+    const TOP = c('#245296'), BLUE = c('#3b82d4'), SIDE = c('#5a9ee3'), BELLY = c('#f1f5f8'), SLIT = c('#16335c'), WHITE = c('#ffffff'), CAV = c('#4a0f1c'), GUM = c('#c8495a');
+    const skin = MAT({ roughness: .32 }), fin = MAT({ roughness: .36 }), shoeM = MAT({ roughness: .58 }), glossy = MAT({ roughness: .06 }), mouthM = MAT({ roughness: .7 });
+    const L = 1.78, Z0 = -.96;   // tail stalk at z = -.96, snout tip at z = .82
+    const W = u => u <= .55 ? .034 + .172*Math.pow(Math.sin(Math.PI/2*Math.min(1, u/.55)), 1.5) : Math.max(.012, .206*Math.pow(Math.cos(Math.PI/2*(u - .55)/.45), .78));
+    const sec = u => { const w = W(u); return { w, ht: 1.22*w, hb: (1.02 - .12*smooth(.6, 1, u))*w, y: .035*Math.sin(Math.PI*u) + .03*smooth(.78, 1, u) }; };
+    const tmp = new THREE.Color(), sp = E.mulberry32(9);
+    // countershading: dark back, bright flank, white belly below a slightly wavy line, a faint speckle
+    const shade = (x, y, z, th, u) => { const a = Math.min(th, Math.PI*2 - th), edge = 1.8 + .035*Math.sin(u*23) + .015*Math.sin(u*61);
+      tmp.copy(TOP).lerp(BLUE, smooth(.15, .9, a)).lerp(SIDE, smooth(1.1, 1.65, a)).lerp(BELLY, smooth(edge - .07, edge + .07, a));
+      return tmp.clone().multiplyScalar(.97 + .06*sp()); };
+    const bodyGeo = loft(L, Z0, sec, shade);
+    const bm = new THREE.Mesh(bodyGeo, skin); bm.castShadow = bm.receiveShadow = true; body.add(bm);
+    // a point on the skin at u along the body, angle th round it (0 = top, PI = belly), pushed out by k
+    const surf = (u, th, k = 1) => { const s = sec(u), e = 2/2.2, sn = Math.sin(th), cs = Math.cos(th), sg = v => v < 0 ? -1 : 1;
+      return [k*s.w*sg(sn)*Math.pow(Math.abs(sn), e), s.y + k*(cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e), Z0 + u*L]; };
+    // eyes under a brow ridge, five gill slits, nostrils
     for (const s of [-1, 1]){
-      const e = surf(.42, s*1.2, .96);
-      put([[SPH, e, 0, [.034, .052, .052], c('#0b0f16')]], body, glossy);
-      put([[SPH, [e[0] + s*.022, e[1] + .02, e[2] + .025], 0, .012, WHITE]], body, glossy);
-      for (let k = 0; k < 3; k++){ const g = surf(.2 - k*.07, s*1.65, .995); put([[BOX, g, [0, s*.12, s*.05], [.014, .16 - k*.02, .022], DARK]], body, skin); }
-      put([[SPH, surf(.66, s*.55, .98), 0, .013, DARK]], body, skin);
+      const e = surf(.86, s*1.32, .97);
+      put([[SPH, e, [0, s*.5, 0], [.026, .034, .04], c('#06090f')], [SPH, [e[0] + s*.012, e[1] + .012, e[2] + .022], 0, .009, WHITE]], body, glossy);
+      put([[SPH, surf(.865, s*1.18, 1.0), [.2, s*.45, s*.35], [.03, .014, .055], BLUE]], body, skin);
+      for (let k = 0; k < 5; k++){ const u = .655 + k*.03, pts = [1.45, 1.7, 1.95, 2.18].map(a => new THREE.Vector3(...surf(u - (a - 1.45)*.012, s*a, 1.004)));
+        const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, .0065 - k*.0004, 6), new THREE.MeshStandardMaterial({ color: SLIT, roughness: .6 })); body.add(m); }
+      put([[SPH, surf(.965, s*2.2, .99), [0, 0, 0], [.012, .008, .02], SLIT]], body, skin);
     }
-    // the grin: a dark lip line round the lower front of the snout, a row of white teeth hanging from it
-    const mouthPts = [-1.15, -.6, 0, .6, 1.15].map((a, i) => new THREE.Vector3(...surf(.5 + .06*Math.cos(a), Math.PI - a, 1.0)));
-    const mouth = new THREE.CatmullRomCurve3(mouthPts);
-    const grin = grp(body, 0, 0, 0);
-    const lip = new THREE.Mesh(new THREE.TubeGeometry(mouth, 30, .017, 8), new THREE.MeshStandardMaterial({ color: c('#5a1420'), roughness: .5 })); grin.add(lip);
-    const teeth = []; for (let k = 0; k < 11; k++){ const p = mouth.getPoint(.05 + k*.09); teeth.push([C(0, .015, 6), [p.x*.97, p.y - .022, p.z], [Math.PI, 0, 0], [1, .045, 1], WHITE]); }
-    put(teeth, grin, glossy);
-    // fins: dorsal, pectorals, tail (wags)
-    const dorsal = plate([[.2, 0], [.05, .25, -.14, .42], [-.08, .17, -.24, 0]], .045);
-    put([[dorsal, [0, .24, -.12], [0, -Math.PI/2, 0], 1, (x, y) => tmp.copy(BLUE).lerp(DEEP, smooth(.3, .6, y - .9)).clone()]], body, skin);
-    const pect = plate([[.12, 0], [.02, -.12, -.2, -.3], [-.05, -.1, -.1, 0]], .035);
-    for (const s of [-1, 1]) put([[pect, [s*.2, -.1, .2], [0, -Math.PI/2, s*.7], [1, 1, s], BLUE]], body, skin);
-    put([[plate([[.08, 0], [0, .1, -.08, .14], [-.03, .05, -.07, 0]], .025), [0, .14, -.62], [0, -Math.PI/2, 0], 1, DEEP]], body, skin);
-    const tail = grp(body, 0, .02, Z0 + .04);
-    put([[plate([[.04, 0], [-.08, .2, -.3, .4], [-.16, .14, -.1, .02], [-.14, -.08, -.22, -.24], [-.06, -.1, .04, 0]], .04), [0, 0, 0], [0, -Math.PI/2, 0], 1, BLUE]], tail, skin);
-    // three legs in sneakers: two in front, one behind (a tripod gait)
-    const SHOE = c('#2b63d9'), SOLE = c('#f4f6f8'), LACE = c('#ffffff');
-    const legs = [[-.13, .14], [.13, .14], [0, -.42]].map(([x, z]) => {
-      const l = leg(root, x, .66, z, .29, .29, .062, .046, BLUE, skin);
-      put([[BOX, [0, -.045, .05], 0, [.13, .035, .27], SOLE], [SPH, [0, -.003, .045], 0, [.066, .055, .13], SHOE], [SPH, [0, -.01, .145], 0, [.058, .042, .055], SOLE],
-           [C(.055, .06, 14), [0, .02, -.02], 0, [1, .06, 1], c('#1d3f8f')], [SPH, [0, .02, -.06], 0, [.05, .05, .05], SHOE],
-           ...[0, 1, 2].map(k => [BOX, [0, .045 - k*.008, .02 + k*.035], [.2, 0, 0], [.07, .01, .012], LACE])], l.an, shoeM);
-      return l;
+    // the grin: a dark mouth under the snout, gum, a row of upper teeth and (on the chomping jaw) lower teeth
+    const mouthAt = (k, out = 1.0) => { const a = Math.PI + (k - .5)*2*1.05, u = .79 + .085*Math.cos((k - .5)*Math.PI); return surf(u, a, out); };
+    const rim = new THREE.CatmullRomCurve3([...Array(9)].map((_, i) => new THREE.Vector3(...mouthAt(i/8, 1.003))));
+    put([[SPH, surf(.815, Math.PI, .9), 0, [.115, .034, .09], CAV]], body, mouthM);
+    const gum = new THREE.Mesh(new THREE.TubeGeometry(rim, 40, .012, 8), new THREE.MeshStandardMaterial({ color: GUM, roughness: .5 })); body.add(gum);
+    const tUp = []; for (let k = 0; k < 15; k++){ const p = rim.getPoint(.03 + k*.067); tUp.push([C(0, .013, 4), [p.x*.985, p.y - .018, p.z - .004], [Math.PI, 0, 0], [1, .038, .55], WHITE]); }
+    put(tUp, body, glossy);
+    const jaw = grp(body, 0, 0, 0), tLo = [];
+    for (let k = 0; k < 11; k++){ const p = rim.getPoint(.1 + k*.08); tLo.push([C(0, .011, 4), [p.x*.9, p.y - .03, p.z - .03], 0, [1, .03, .55], WHITE]); }
+    put(tLo, jaw, glossy);
+    // fins: thin and sharp. Dorsal (falcate), second dorsal, pectorals (long sickles), pelvics, anal, tail (lunate) + keels
+    const thin = (pts, d = .022) => plate(pts, d, .005);
+    const FIN = (x, y) => tmp.copy(BLUE).lerp(TOP, smooth(.2, .5, y)).clone();
+    put([[thin([[.17, 0], [.06, .2, -.13, .37], [-.1, .17, -.12, .02], [-.16, 0]]), surf(.53, 0, .93), [0, -Math.PI/2, 0], 1, FIN]], body, fin);
+    put([[thin([[.05, 0], [0, .05, -.05, .08], [-.04, .03, -.05, 0]], .015), surf(.27, 0, .9), [0, -Math.PI/2, 0], 1, TOP]], body, fin);
+    put([[thin([[.04, 0], [.0, -.05, -.05, -.07], [-.03, -.02, -.04, 0]], .015), surf(.24, Math.PI, .9), [0, -Math.PI/2, 0], 1, BELLY]], body, fin);
+    for (const s of [-1, 1]){
+      put([[thin([[.11, 0], [.04, -.16, -.17, -.34], [-.07, -.15, -.07, 0]]), surf(.66, s*2.1, .9), [s*.75, -Math.PI/2, 0], 1, (x, y, z, nx, ny) => tmp.copy(BLUE).lerp(TOP, smooth(.2, .8, ny)).lerp(SIDE, smooth(-.2, -.8, ny)).clone()]], body, fin);
+      put([[thin([[.05, 0], [.0, -.05, -.07, -.09], [-.03, -.03, -.04, 0]], .015), surf(.36, s*2.5, .92), [s*.8, -Math.PI/2, 0], 1, BELLY]], body, fin);
+      put([[SPH, surf(.06, s*Math.PI/2, .95), 0, [.02, .008, .07], TOP]], body, skin);
+    }
+    const tail = grp(body, 0, sec(0).y, Z0 + .01);
+    put([[thin([[.03, 0], [-.04, .2, -.2, .43], [-.1, .24, -.07, .03], [-.11, -.13, -.17, -.27], [-.04, -.12, .03, 0]], .028), [0, 0, 0], [0, -Math.PI/2, 0], 1, FIN]], tail, fin);
+    // three legs (two in front, one behind: a tripod gait) in sneakers with laces, eyelets, heel tab and tread
+    const SHOE = c('#2b63d9'), SHOE2 = c('#1f4cb3'), SOLE = c('#f4f6f8'), TREAD = c('#7d8590'), LACE = c('#ffffff');
+    const legs = [[-.13, .12], [.13, .12], [0, -.38]].map(([x, z]) => {
+      const hp = grp(root, x, .77, z), kn = grp(hp, 0, -.37, 0), an = grp(kn, 0, -.32, 0);   // hips inside the belly
+      put([[SPH, [0, 0, 0], 0, .045, BLUE], [limb(.38, .05, .036, .009), [0, 0, 0], 0, 1, BLUE]], hp, skin);
+      put([[SPH, [0, 0, .003], 0, [.036, .037, .039], BLUE], [limb(.32, .036, .026, .006), [0, 0, 0], 0, 1, BLUE]], kn, skin);
+      put([[SPH, [0, -.052, .03], 0, [.07, .028, .15], SOLE], [SPH, [0, -.07, .03], 0, [.071, .012, .151], TREAD],
+           ...[-.06, -.02, .02, .06, .1].map(q => [BOX, [0, -.081, .03 + q], 0, [.1, .004, .012], c('#5b626b')]),
+           [SPH, [0, -.012, .045], 0, [.062, .056, .12], SHOE], [SPH, [0, -.03, .135], 0, [.055, .04, .055], SHOE2],
+           [SPH, [0, -.005, -.05], 0, [.058, .062, .055], SOLE], [BOX, [0, .05, -.085], [-.25, 0, 0], [.03, .05, .012], SHOE2],
+           [SPH, [0, .028, .06], [-.5, 0, 0], [.035, .012, .07], c('#4d82e8')], [new THREE.TorusGeometry(.05, .014, 8, 20), [0, .035, -.01], [Math.PI/2, 0, 0], [1, 1.15, 1], SHOE2],
+           ...[0, 1, 2, 3].map(k => [C(.004, .004, 6), [0, .03 - k*.012, .025 + k*.028], [0, 0, Math.PI/2], [1, .085, 1], LACE]),
+           ...[0, 1, 2, 3].flatMap(k => [-1, 1].map(s => [SPH, [s*.043, .03 - k*.012, .025 + k*.028], 0, .006, c('#d9dde3')])),
+           ...[-1, 1].map(s => [new THREE.TorusGeometry(.016, .004, 6, 14), [s*.018, .045, .02], [Math.PI/2 - .4, 0, s*.5], 1, LACE]),
+           ...[-1, 1].map(s => [SPH, [s*.058, -.035, .03], 0, [.012, .014, .1], SOLE])], an, shoeM);
+      return { hp, kn, an };
     });
     root.scale.setScalar((o.height ?? 1.55)/1.55); ctx.scene.add(root);
     return { object: root, height: o.height ?? 1.55, update(t, st = {}){
       const a = clamp((st.speed || 0)/.9, 0, 1.4), dir = st.dir ?? 1, f = st.phase ?? t*6.2832*2.4, sur = st.surprise || 0;
       stepLegs(legs, f, a, dir, [0, Math.PI, Math.PI/2]);
-      body.position.y = .9 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .012*Math.sin(t*2.1);
+      body.position.y = .94 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .01*Math.sin(t*2.1);
       body.rotation.set(.04*a*dir - .1*sur, 0, .05*a*Math.sin(f*.5));
-      tail.rotation.y = (.35*a + .15)*Math.sin(t*(4 + 6*a)) + (st.wag || 0)*.6*Math.sin(t*14);
-      const ch = st.chomp || 0; grin.position.y = -.02*ch*Math.abs(Math.sin(t*9)); grin.scale.setScalar(1 + .25*sur);
+      tail.rotation.y = (.35*a + .18)*Math.sin(t*(4 + 6*a)) + (st.wag || 0)*.6*Math.sin(t*14);
+      const ch = st.chomp || 0; jaw.position.set(0, -.035*ch*Math.abs(Math.sin(t*9)), 0);
       if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); body.rotation.y = clamp(Math.atan2(v.x, v.z), -.35, .35); }
     } };
   }
@@ -204,7 +250,7 @@
   function ballerina(ctx, o){
     const c = ctx.col, root = new THREE.Group(), spin = grp(root), body = grp(spin, 0, .9, 0);
     const PINK = c('#f27aa9'), PINK2 = c('#f7a6c6'), PINK3 = c('#fbcadd'), SKIN = c('#f2cdb5'), TIGHTS = c('#f6c3cf'), SATIN = c('#f3a9bd'), CUP = c('#fbfaf6');
-    const cloth = MAT({ roughness: .7 }), skinM = MAT({ roughness: .55 }), china = MAT({ roughness: .18 }), satin = MAT({ roughness: .3 });
+    const cloth = MAT({ roughness: .7 }), skinM = MAT({ roughness: .55 }), china = MAT({ roughness: .18 }), satin = MAT({ roughness: .3 }), glossy = MAT({ roughness: .08 });
     // tutu: three ruffled layers; leotard torso; neck
     const tutu = grp(body, 0, -.02, 0);
     [[.45, PINK3, -.02], [.4, PINK2, .015], [.34, PINK, .05]].forEach(([r, col, y]) => {
@@ -213,9 +259,9 @@
       put([[g, [0, y, 0], 0, 1, col]], tutu, cloth); });
     const torso = u => .095 + .03*Math.sin(Math.PI*u*.9) + .02*smooth(.7, 1, u);
     put([[lathe(torso, .36, 28, 24), [0, .02, 0], [-Math.PI/2, 0, 0], [1.1, 1, .8], PINK], [SPH, [0, .38, 0], 0, [.15, .05, .1], PINK],
-         [C(.034, .036, 12), [0, .43, 0], 0, [1, .09, 1], SKIN]], body, cloth);
+         [C(.04, .044, 14), [0, .425, 0], 0, [1, .07, 1], SKIN]], body, cloth);
     // head = cappuccino on a saucer: the cup, its rim, the latte art, the handle
-    const head = grp(body, 0, .47, 0); head.scale.setScalar(1.25);
+    const head = grp(body, 0, .455, 0); head.scale.setScalar(1.25);
     const cupR = u => .1 + .075*Math.pow(u, .8) - .03*Math.pow(1 - u, 6);
     put([[C(.2, .17, 40), [0, .01, 0], 0, [1, .025, 1], CUP], [new THREE.TorusGeometry(.2, .01, 8, 40), [0, .024, 0], [Math.PI/2, 0, 0], 1, CUP],
          [lathe(cupR, .28, 40, 24), [0, .03, 0], [-Math.PI/2, 0, 0], 1, CUP], [new THREE.TorusGeometry(.172, .011, 8, 40), [0, .31, 0], [Math.PI/2, 0, 0], 1, CUP],
@@ -225,7 +271,22 @@
     // foam rising over the rim (so the coffee reads from the front too), a drip down the side, a pink band
     put([[SPH, [0, .315, 0], 0, [.15, .035, .15], c('#efe0c4')], [SPH, [.03, .335, -.02], 0, [.06, .018, .06], c('#f6ecd9')],
          [SPH, [-.15, .26, .07], 0, [.018, .05, .018], c('#8a5a35')], [SPH, [-.152, .225, .07], 0, .016, c('#8a5a35')]], head, china);
-    put([[C(.162, .156, 40), [0, .2, 0], 0, [1.005, .025, 1.005], c('#f27aa9')]], head, china);
+    put([[C(.162, .156, 40), [0, .245, 0], 0, [1.005, .02, 1.005], c('#f27aa9')]], head, china);
+    // her face, painted on the cup: big eyes with lashes, thin brows, blush, a small smile (an 'o' when surprised)
+    const cupAt = y => cupR((y - .03)/.28), onCup = (x, y, inset = 0) => { const r = cupAt(y) - inset; return [x, y, Math.sqrt(Math.max(0, r*r - x*x))]; };
+    const matte = MAT({ roughness: .5 }), DARKF = c('#2a1a14');
+    const eyes = [-1, 1].map(s => { const p = onCup(s*.06, .165, .004), g = grp(head, ...p); g.rotation.y = Math.atan2(p[0], p[2]);
+      put([[SPH, [0, 0, 0], 0, [.031, .038, .016], c('#ffffff')]], g, glossy);
+      const iris = grp(g, 0, -.004, 0);
+      put([[SPH, [0, 0, .011], 0, [.02, .023, .008], c('#6a3c22')], [SPH, [0, 0, .016], 0, [.011, .013, .005], c('#120a06')], [SPH, [.007, .009, .02], 0, .0055, c('#ffffff')]], iris, glossy);
+      put([0, 1, 2].map(k => [BOX, [s*(.016 + k*.008), .034 - k*.006, .006], [0, 0, s*(-.45 - k*.4)], [.0045, .018, .004], DARKF]), g, matte);
+      return { g, iris }; });
+    for (const s of [-1, 1]){ const b = onCup(s*.062, .218, -.002), q = onCup(s*.098, .118, -.001);
+      put([[SPH, b, [0, Math.atan2(b[0], b[2]), s*-.18], [.024, .0045, .005], c('#7a4a32')]], head, matte);
+      put([[SPH, q, [0, Math.atan2(q[0], q[2]), 0], [.022, .012, .004], c('#f59ab5')]], head, matte); }
+    const smile = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([-.03, -.015, 0, .015, .03].map((x, i) => new THREE.Vector3(...onCup(x, .102 - [.0, .008, .011, .008, .0][i], -.001)))), 16, .0045, 6),
+      new THREE.MeshStandardMaterial({ color: c('#b8324f'), roughness: .5 })); head.add(smile);
+    const mouthO = new THREE.Mesh(solid([[SPH, onCup(0, .098, -.002), 0, [.012, .016, .005], c('#7a1f35')]]), matte); mouthO.visible = false; head.add(mouthO);
     // arms: shoulders -> elbows -> hands
     const arms = [-1, 1].map(s => { const sh = grp(body, s*.15, .35, 0), el = grp(sh, 0, -.25, 0);
       put([[SPH, [0, 0, 0], 0, .038, SKIN], [C(.032, .026, 12), [0, -.125, 0], 0, [1, .25, 1], SKIN]], sh, skinM);
@@ -248,6 +309,9 @@
       tutu.rotation.y = -.25*Math.sin((st.spin || 0)*.5); tutu.scale.y = 1 - .25*pir;
       arms.forEach(({ sh, el, s }) => { sh.rotation.set(-.35*up - .5*pir, 0, s*(.25 + 2.35*up - 1.0*pir)); el.rotation.x = -(.45 + .3*up + .5*pir); });
       head.rotation.z = .04*Math.sin(t*1.4);
+      const sur = st.surprise || 0, blink = sur < .5 && ((t + .7) % 3.6) < .11 ? .1 : 1;
+      eyes.forEach(e => { e.g.scale.set(1 + .2*sur, (1 + .25*sur)*blink, 1); });
+      smile.visible = sur < .45; mouthO.visible = !smile.visible; mouthO.scale.set(1, .7 + .6*sur, 1);
     } };
   }
 
