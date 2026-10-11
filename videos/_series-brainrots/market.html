@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The market square</title>
+<link rel="stylesheet" href="../../engine/engine.css">
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="../../engine/engine.js"></script>
+<script src="../../engine/look.js"></script>
+<script src="../../engine/kit.js"></script>
+<script src="../../engine/kit-game.js"></script>
+<script src="../../engine/brainrots.js"></script>
+<script src="../../engine/sets.js"></script>
+<script>
+// Brainrot series · set test: the market square (Engine.fx.set 'market'), a toy diorama on a floating island.
+// 0–5 the island · 5–10 into the square, the cast walks in · 10–15 a stall: the price doubles and doubles ·
+// 15–19 Bombardiro flies over, the pigeons scatter, the bell rings · 19–24 the day goes by, night falls
+const { clamp, smooth, lerp } = Engine;
+const SHOT = [0, 5, 10, 15, 19], END = 24;
+const G = Engine.game;
+const ISLAND = [[-14.2, 0, -14.2], [14.2, 0, -14.2], [-14.2, 0, 14.2], [14.2, 0, 14.2], [-11, 17.6, -10.8], [0, -10.2, 0], [0, -6, 10], [0, -6, -10], [10, -6, 0], [-10, -6, 0]];
+const PRICES = [[0, '2{c}'], [11.4, '4{c}'], [12.4, '8{c}'], [13.4, '16{c}'], [14.4, '32{c}']];
+
+Engine.game.fonts().then(() => Engine.create({
+  title: 'The <em>market</em> square',
+  hud: 'editorial',
+  ariaLabel: 'A toy town square on a floating island: market stalls, a fountain, a clock tower, the brainrot cast walking in',
+  duration: END, tail: .6, seed: 12,
+  fog: [220, 900], fov: 32, far: 900,
+  look: { vignette: 0, grain: 0, exposure: .95, saturation: 1.1, contrast: 1.05, env: .3, bloom: { strength: .3, radius: .45, threshold: 1.4 } },
+  sound: true,
+
+  setup(ctx){
+    const { THREE } = ctx, B = Engine.fx.brainrot;
+    ctx.camera.near = .1; ctx.camera.updateProjectionMatrix();
+    Object.assign(ctx.sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 120 }); ctx.sun.shadow.camera.updateProjectionMatrix();
+    const set = Engine.fx.set(ctx, 'market');
+    const sp = set.spots, st0 = sp.stalls[0], away = [st0.at[0] - st0.board[0], st0.at[1] - st0.board[2]], al = Math.hypot(...away), side = [st0.at[0] + away[0]/al*1.0, st0.at[1] + away[1]/al*1.0];
+    const ch = { sahur: B(ctx, 'sahur', { height: 1.5 }), tralalero: B(ctx, 'tralalero'), ballerina: B(ctx, 'ballerina'), bombardiro: B(ctx, 'bombardiro') };
+    const tr = {
+      sahur: B.track([{ t: 0, x: 0, z: 14 }, { t: 5.2, x: 0, z: 14 }, { t: 9.2, x: -.6, z: 5.6 }, { t: 9.6, x: -.6, z: 5.6, yaw: Math.PI }, { t: 11, x: -.6, z: 5.6, yaw: Math.PI },
+        { t: 13, x: side[0], z: side[1] }, { t: 13.4, x: side[0], z: side[1], yaw: st0.yaw + Math.PI }]),
+      ballerina: B.track([{ t: 0, x: -9, z: 9.5 }, { t: 5.4, x: -9, z: 9.5 }, { t: 9.4, x: st0.at[0], z: st0.at[1] }, { t: 9.9, x: st0.at[0], z: st0.at[1], yaw: st0.yaw + Math.PI }]),
+      tralalero: B.track([{ t: 0, x: 9, z: 9.5 }, { t: 6.0, x: 9, z: 9.5 }, { t: 8.4, x: 3.6, z: 5.2 }, { t: 9.0, x: 3.6, z: 5.2, yaw: -.6 }]),
+      bombardiro: B.track([{ t: 0, x: -6, z: -80, y: 18 }, { t: 15, x: -2, z: -40, y: 22 }, { t: 17.2, x: 0, z: -6, y: 12 }, { t: 19.4, x: 2, z: 20, y: 9 }, { t: 24, x: 10, z: 90, y: 14 }]),
+    };
+    return { set, ch, tr, side };
+  },
+
+  update(ctx, t, dt){
+    const S = ctx.state, c = ctx.col, sp = S.set.spots, st0 = sp.stalls[0];
+    // cameras
+    const shot = SHOT.filter(s => t >= s).length - 1, u = smooth(SHOT[shot], SHOT[shot + 1] ?? END, t);
+    let pos, look, fov = 32;
+    if (shot === 0){ const f = G.fit(ISLAND, { yaw: Math.PI - .5 + .45*u, pitch: -.24, fov: 32, top: .3, bottom: .88 }); pos = f.pos; look = f.look; }
+    else if (shot === 1){ pos = [lerp(1.2, .4, u), lerp(2.6, 2.0, u), lerp(17, 12.5, u)]; look = [0, 2.6, -4]; }
+    else if (shot === 2){ const p = st0.at, f = G.fit([[p[0], 0, p[1]], [p[0], 2.0, p[1]], st0.board, [st0.board[0], 0, st0.board[2]], [st0.board[0], 1.45, st0.board[2]], st0.sign, [S.side[0], 1.6, S.side[1]]],
+        { yaw: st0.view, pitch: -.06, fov: 30 }); pos = f.pos.map((v, k) => f.look[k] + (v - f.look[k])*(1 - .1*u)); look = f.look; fov = 30; }
+    else if (shot === 3){ const b = S.tr.bombardiro(t), k = .7*smooth(15.6, 16.6, t)*(1 - smooth(17.4, 18.4, t));   // the camera follows the plane in, lets it pass overhead
+      pos = [1.5, 1.0, 11]; look = [lerp(-1, b.x, k), lerp(6.8 + 1.2*u, b.y, k), lerp(-8, b.z, k)]; }
+    else { const a = .55 - .25*u; pos = [Math.sin(a)*30, 14 - 2*u, Math.cos(a)*30]; look = [0, 2.5, -2]; }
+    ctx.camera.position.set(...pos); ctx.camera.lookAt(...look);
+    if (ctx.camera.fov !== fov){ ctx.camera.fov = fov; ctx.camera.updateProjectionMatrix(); }
+    ctx.aimSun(0, 0, [-16, 26, 20]);
+    // the day goes by in the last shot: the clock races, the sky dims, windows and lamps light up
+    const night = smooth(20.2, 23, t), dusk = Math.sin(Math.PI*clamp((t - 19.6)/3.2, 0, 1));
+    const hz = c('#d4ebf7').lerp(c('#f0a37a'), dusk*.8).lerp(c('#3b3f7a'), night), zn = c('#78b2e8').lerp(c('#5a6fc0'), dusk*.6).lerp(c('#141a3e'), night);
+    ctx.look.setSky(hz, zn); ctx.sun.intensity = 1.9*(1 - .85*night); ctx.hemi.intensity = .78*(1 - .7*night); ctx.hemi.color.copy(c('#fff0da').lerp(c('#8fa0e0'), night)); ctx.sun.color.copy(c('#ffffff').lerp(c('#ffb27a'), dusk*.7));
+    const prices = [PRICES.filter(p => t >= p[0]).pop()[1]];
+    S.set.update(t, { prices, wind: .35 + .5*smooth(15.5, 16.5, t)*(1 - smooth(18.5, 19.5, t)), night, scatter: Math.max(0, t - 15.8), bell: smooth(16.5, 17, t)*(1 - smooth(18.6, 19.2, t)),
+      clock: 10 + 10/60 + t/3600 + 9.5*smooth(19.3, 23.5, t) });
+    for (const k of [11.4, 12.4, 13.4, 14.4]) if (t >= k && t - dt < k) ctx.audio.hit('knock', { pitch: 1.6, ring: .2, strength: .5 });
+    if (t >= 16.6 && t - dt < 16.6) ctx.audio.hit('knock', { pitch: .5, ring: 1, strength: .7 });
+
+    const camV = new THREE.Vector3(...pos);
+    const walk = (k, extra = {}) => { const p = S.tr[k](t), o = S.ch[k].object; o.position.set(p.x, 0, p.z); o.rotation.y = p.yaw; S.ch[k].update(t, Object.assign({ speed: p.speed, look: p.moving ? null : camV }, extra)); };
+    walk('sahur', { surprise: smooth(11.5, 11.7, t)*(1 - smooth(12, 12.3, t)) + smooth(13.5, 13.7, t), raise: smooth(14.4, 14.7, t),
+      jump: .22*Math.max(0, Math.sin(clamp((t - 14.45)/.5, 0, 1)*Math.PI)) });
+    walk('ballerina', { arms: .2 + .7*smooth(12.4, 12.8, t), surprise: smooth(11.4, 11.6, t)*(1 - smooth(12.1, 12.4, t)) + smooth(13.4, 13.6, t), look: t > 10 && t < 15 ? new THREE.Vector3(...st0.board) : null });
+    walk('tralalero', { surprise: smooth(15.6, 15.9, t)*(1 - smooth(17, 17.5, t)), chomp: smooth(16.2, 16.4, t)*(1 - smooth(17.2, 17.4, t)) });
+    { const p = S.tr.bombardiro(t), o = S.ch.bombardiro.object; o.position.set(p.x, 0, p.z); o.rotation.y = p.yaw;
+      S.ch.bombardiro.update(t, { alt: p.y, bank: -.25*smooth(16.5, 17.5, t), pitch: 0, bombs: 2, prop: 1 }); ctx.audio.set('hum', .25*smooth(14.5, 16.5, t)*(1 - smooth(18.5, 20, t))); }
+    for (const s of SHOT.slice(1)) if (t >= s && t - dt < s) ctx.audio.hit('whoosh', { strength: .3 });
+    return {};
+  },
+}));
+</script>
+</body>
+</html>
