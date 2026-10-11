@@ -97,49 +97,50 @@
     return new THREE.LatheGeometry(pts.reverse(), seg);
   }
   function tralalero(ctx, o){
-    const c = ctx.col, root = new THREE.Group(), body = grp(root, 0, .94, 0);
+    const c = ctx.col, root = new THREE.Group(), body = grp(root, 0, .86, 0);
     const TOP = c('#245296'), BLUE = c('#3b82d4'), SIDE = c('#5a9ee3'), BELLY = c('#f1f5f8'), SLIT = c('#16335c'), WHITE = c('#ffffff'), CAV = c('#4a0f1c'), GUM = c('#c8495a');
     const skin = MAT({ roughness: .32 }), fin = MAT({ roughness: .36 }), shoeM = MAT({ roughness: .58 }), glossy = MAT({ roughness: .06 }), mouthM = MAT({ roughness: .7 });
-    const L = 1.78, Z0 = -.96;   // tail stalk at z = -.96, snout tip at z = .82
-    const W = u => u <= .55 ? .034 + .172*Math.pow(Math.sin(Math.PI/2*Math.min(1, u/.55)), 1.5) : Math.max(.012, .206*Math.pow(Math.cos(Math.PI/2*(u - .55)/.45), .78));
-    const sec = u => { const w = W(u); return { w, ht: 1.22*w, hb: (1.02 - .12*smooth(.6, 1, u))*w, y: .035*Math.sin(Math.PI*u) + .03*smooth(.78, 1, u) }; };
+    // a stocky great white, not a mako: deep body, mass forward, blunt conical snout, thin tail stalk
+    const L = 1.62, Z0 = -.86;   // tail stalk at z = -.86, snout tip at z = .76
+    const W = u => u <= .58 ? .045 + .215*Math.pow(Math.sin(Math.PI/2*clamp((u - .04)/.54, 0, 1)), 1.25) : Math.max(.02, .26*Math.pow(Math.cos(Math.PI/2*(u - .58)/.42), .55));
+    const sec = u => { const w = W(u); return { w, ht: 1.3*w, hb: (1.15 - .15*smooth(.75, 1, u))*w, y: .04*Math.sin(Math.PI*u) + .02*smooth(.85, 1, u) }; };
     const tmp = new THREE.Color(), sp = E.mulberry32(9);
     // countershading: dark back, bright flank, white belly below a slightly wavy line, a faint speckle
     const shade = (x, y, z, th, u) => { const a = Math.min(th, Math.PI*2 - th), edge = 1.8 + .035*Math.sin(u*23) + .015*Math.sin(u*61);
       tmp.copy(TOP).lerp(BLUE, smooth(.15, .9, a)).lerp(SIDE, smooth(1.1, 1.65, a)).lerp(BELLY, smooth(edge - .07, edge + .07, a));
       return tmp.clone().multiplyScalar(.97 + .06*sp()); };
-    const bodyGeo = loft(L, Z0, sec, shade);
+    const bodyGeo = loft(L, Z0, u => { const q = sec(u); if (u <= 0 || u >= 1){ q.w = q.ht = q.hb = 0; } return q; }, shade, 72, 48, 2.05);   // closed at both ends
     const bm = new THREE.Mesh(bodyGeo, skin); bm.castShadow = bm.receiveShadow = true; body.add(bm);
     // a point on the skin at u along the body, angle th round it (0 = top, PI = belly), pushed out by k
-    const surf = (u, th, k = 1) => { const s = sec(u), e = 2/2.2, sn = Math.sin(th), cs = Math.cos(th), sg = v => v < 0 ? -1 : 1;
+    const surf = (u, th, k = 1) => { const s = sec(u), e = 2/2.05, sn = Math.sin(th), cs = Math.cos(th), sg = v => v < 0 ? -1 : 1;
       return [k*s.w*sg(sn)*Math.pow(Math.abs(sn), e), s.y + k*(cs >= 0 ? s.ht : s.hb)*sg(cs)*Math.pow(Math.abs(cs), e), Z0 + u*L]; };
     // eyes under a brow ridge, five gill slits, nostrils
     for (const s of [-1, 1]){
-      const e = surf(.86, s*1.32, .97);
+      const e = surf(.845, s*1.3, .97);
       put([[SPH, e, [0, s*.5, 0], [.026, .034, .04], c('#06090f')], [SPH, [e[0] + s*.012, e[1] + .012, e[2] + .022], 0, .009, WHITE]], body, glossy);
-      put([[SPH, surf(.865, s*1.18, 1.0), [.2, s*.45, s*.35], [.03, .014, .055], BLUE]], body, skin);
-      for (let k = 0; k < 5; k++){ const u = .655 + k*.03, pts = [1.45, 1.7, 1.95, 2.18].map(a => new THREE.Vector3(...surf(u - (a - 1.45)*.012, s*a, 1.004)));
+      put([[SPH, surf(.85, s*1.16, 1.0), [.2, s*.45, s*.35], [.034, .016, .06], BLUE]], body, skin);
+      for (let k = 0; k < 5; k++){ const u = .64 + k*.03, pts = [1.45, 1.7, 1.95, 2.18].map(a => new THREE.Vector3(...surf(u - (a - 1.45)*.012, s*a, 1.004)));
         const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, .0065 - k*.0004, 6), new THREE.MeshStandardMaterial({ color: SLIT, roughness: .6 })); body.add(m); }
       put([[SPH, surf(.965, s*2.2, .99), [0, 0, 0], [.012, .008, .02], SLIT]], body, skin);
     }
     // the grin: a dark mouth under the snout, gum, a row of upper teeth and (on the chomping jaw) lower teeth
-    const mouthAt = (k, out = 1.0) => { const a = Math.PI + (k - .5)*2*1.05, u = .79 + .085*Math.cos((k - .5)*Math.PI); return surf(u, a, out); };
+    const mouthAt = (k, out = 1.0) => { const a = Math.PI + (k - .5)*2*1.2, u = .76 + .1*Math.cos((k - .5)*Math.PI); return surf(u, a, out); };
     const rim = new THREE.CatmullRomCurve3([...Array(9)].map((_, i) => new THREE.Vector3(...mouthAt(i/8, 1.003))));
-    put([[SPH, surf(.815, Math.PI, .9), 0, [.115, .034, .09], CAV]], body, mouthM);
+    put([[SPH, surf(.8, Math.PI, .88), 0, [.15, .045, .11], CAV]], body, mouthM);
     const gum = new THREE.Mesh(new THREE.TubeGeometry(rim, 40, .012, 8), new THREE.MeshStandardMaterial({ color: GUM, roughness: .5 })); body.add(gum);
-    const tUp = []; for (let k = 0; k < 15; k++){ const p = rim.getPoint(.03 + k*.067); tUp.push([C(0, .013, 4), [p.x*.985, p.y - .018, p.z - .004], [Math.PI, 0, 0], [1, .038, .55], WHITE]); }
+    const tUp = []; for (let k = 0; k < 17; k++){ const p = rim.getPoint(.03 + k*.059); tUp.push([C(0, .016, 4), [p.x*.985, p.y - .022, p.z - .004], [Math.PI, 0, 0], [1, .046, .55], WHITE]); }
     put(tUp, body, glossy);
     const jaw = grp(body, 0, 0, 0), tLo = [];
-    for (let k = 0; k < 11; k++){ const p = rim.getPoint(.1 + k*.08); tLo.push([C(0, .011, 4), [p.x*.9, p.y - .03, p.z - .03], 0, [1, .03, .55], WHITE]); }
+    for (let k = 0; k < 13; k++){ const p = rim.getPoint(.08 + k*.07); tLo.push([C(0, .013, 4), [p.x*.9, p.y - .04, p.z - .035], 0, [1, .036, .55], WHITE]); }
     put(tLo, jaw, glossy);
     // fins: thin and sharp. Dorsal (falcate), second dorsal, pectorals (long sickles), pelvics, anal, tail (lunate) + keels
     const thin = (pts, d = .022) => plate(pts, d, .005);
     const FIN = (x, y) => tmp.copy(BLUE).lerp(TOP, smooth(.2, .5, y)).clone();
-    put([[thin([[.17, 0], [.06, .2, -.13, .37], [-.1, .17, -.12, .02], [-.16, 0]]), surf(.53, 0, .93), [0, -Math.PI/2, 0], 1, FIN]], body, fin);
+    put([[thin([[.19, 0], [.07, .22, -.14, .4], [-.1, .19, -.13, .02], [-.17, 0]], .026), surf(.55, 0, .93), [0, -Math.PI/2, 0], 1, FIN]], body, fin);
     put([[thin([[.05, 0], [0, .05, -.05, .08], [-.04, .03, -.05, 0]], .015), surf(.27, 0, .9), [0, -Math.PI/2, 0], 1, TOP]], body, fin);
     put([[thin([[.04, 0], [.0, -.05, -.05, -.07], [-.03, -.02, -.04, 0]], .015), surf(.24, Math.PI, .9), [0, -Math.PI/2, 0], 1, BELLY]], body, fin);
     for (const s of [-1, 1]){
-      put([[thin([[.11, 0], [.04, -.16, -.17, -.34], [-.07, -.15, -.07, 0]]), surf(.66, s*2.1, .9), [s*.75, -Math.PI/2, 0], 1, (x, y, z, nx, ny) => tmp.copy(BLUE).lerp(TOP, smooth(.2, .8, ny)).lerp(SIDE, smooth(-.2, -.8, ny)).clone()]], body, fin);
+      put([[thin([[.13, 0], [.05, -.18, -.2, -.38], [-.08, -.17, -.08, 0]], .024), surf(.64, s*2.15, .9), [s*.75, -Math.PI/2, 0], 1, (x, y, z, nx, ny) => tmp.copy(BLUE).lerp(TOP, smooth(.2, .8, ny)).lerp(SIDE, smooth(-.2, -.8, ny)).clone()]], body, fin);
       put([[thin([[.05, 0], [.0, -.05, -.07, -.09], [-.03, -.03, -.04, 0]], .015), surf(.36, s*2.5, .92), [s*.8, -Math.PI/2, 0], 1, BELLY]], body, fin);
       put([[SPH, surf(.06, s*Math.PI/2, .95), 0, [.02, .008, .07], TOP]], body, skin);
     }
@@ -147,10 +148,10 @@
     put([[thin([[.03, 0], [-.04, .2, -.2, .43], [-.1, .24, -.07, .03], [-.11, -.13, -.17, -.27], [-.04, -.12, .03, 0]], .028), [0, 0, 0], [0, -Math.PI/2, 0], 1, FIN]], tail, fin);
     // three legs (two in front, one behind: a tripod gait) in sneakers with laces, eyelets, heel tab and tread
     const SHOE = c('#2b63d9'), SHOE2 = c('#1f4cb3'), SOLE = c('#f4f6f8'), TREAD = c('#7d8590'), LACE = c('#ffffff');
-    const legs = [[-.13, .12], [.13, .12], [0, -.38]].map(([x, z]) => {
-      const hp = grp(root, x, .77, z), kn = grp(hp, 0, -.37, 0), an = grp(kn, 0, -.32, 0);   // hips inside the belly
-      put([[SPH, [0, 0, 0], 0, .045, BLUE], [limb(.38, .05, .036, .009), [0, 0, 0], 0, 1, BLUE]], hp, skin);
-      put([[SPH, [0, 0, .003], 0, [.036, .037, .039], BLUE], [limb(.32, .036, .026, .006), [0, 0, 0], 0, 1, BLUE]], kn, skin);
+    const legs = [[-.15, .12], [.15, .12], [0, -.22]].map(([x, z]) => {
+      const hp = grp(root, x, .62, z), kn = grp(hp, 0, -.27, 0), an = grp(kn, 0, -.27, 0);   // hips inside the belly
+      put([[SPH, [0, 0, 0], 0, .048, BLUE], [limb(.28, .054, .04, .01), [0, 0, 0], 0, 1, BLUE]], hp, skin);
+      put([[SPH, [0, 0, .003], 0, [.04, .041, .043], BLUE], [limb(.27, .04, .029, .007), [0, 0, 0], 0, 1, BLUE]], kn, skin);
       put([[SPH, [0, -.052, .03], 0, [.07, .028, .15], SOLE], [SPH, [0, -.07, .03], 0, [.071, .012, .151], TREAD],
            ...[-.06, -.02, .02, .06, .1].map(q => [BOX, [0, -.081, .03 + q], 0, [.1, .004, .012], c('#5b626b')]),
            [SPH, [0, -.012, .045], 0, [.062, .056, .12], SHOE], [SPH, [0, -.03, .135], 0, [.055, .04, .055], SHOE2],
@@ -166,7 +167,7 @@
     return { object: root, height: o.height ?? 1.55, update(t, st = {}){
       const a = clamp((st.speed || 0)/.9, 0, 1.4), dir = st.dir ?? 1, f = st.phase ?? t*6.2832*2.4, sur = st.surprise || 0;
       stepLegs(legs, f, a, dir, [0, Math.PI, Math.PI/2]);
-      body.position.y = .94 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .01*Math.sin(t*2.1);
+      body.position.y = .86 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .01*Math.sin(t*2.1);
       body.rotation.set(.04*a*dir - .1*sur, 0, .05*a*Math.sin(f*.5));
       tail.rotation.y = (.35*a + .18)*Math.sin(t*(4 + 6*a)) + (st.wag || 0)*.6*Math.sin(t*14);
       const ch = st.chomp || 0; jaw.position.set(0, -.035*ch*Math.abs(Math.sin(t*9)), 0);
