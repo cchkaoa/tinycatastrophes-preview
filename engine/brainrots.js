@@ -14,7 +14,8 @@
                         st {speed, dir, look, surprise, cheer (arms up, waving), laugh, jump}
           'patapim'     Brr Brr Patapim: a trunk of twisted roots (moss, ivy, shelf fungi, a knot hole, mushrooms) with a
                         proboscis monkey's head (ginger fur, cream beard, the long drooping nose) under a crown of leaves,
-                        thin twig arms, huge bare feet, ~1.95 m: st {speed, dir, look, surprise, shiver ('brr brr'), jump}
+                        thin twig arms, huge bare feet, ~1.95 m: st {speed, dir, look, surprise, shiver ('brr brr': he shakes,
+                        teeth chattering), talk (0..1 the mouth moves), jump}
           'sixseven'    67 (also '67'): the numbers 6 and 7 as one creature, an eye in each, blue arms with white hands,
                         trainers, ~1.6 m: st {speed, dir, look, surprise, sixseven (0..1 the six-seven hands), jump}
      o.height rescales the character (metres; default as above).
@@ -500,9 +501,18 @@
     const lids = [-1, 1].map(s => { const g = grp(head, s*.062, .043, .203); put([[SPH, [0, 0, 0], 0, [.037, .018, .024], SKIND]], g, skinM); return g; });
     const brows = [-1, 1].map(s => { const g = grp(head, s*.066, .078, .2); put([[SPH, [0, 0, 0], [0, 0, s*.2], [.05, .017, .025], FURD], [SPH, [s*.03, .006, -.004], [0, 0, s*.5], [.025, .012, .02], FUR]], g, furM); return g; });
     const nose = grp(head, 0, .0, .215);
-    put([[SPH, [0, -.01, .01], 0, [.03, .04, .03], SKIN], [SPH, [0, -.07, .045], [.35, 0, 0], [.05, .09, .052], NOSE], [SPH, [0, -.14, .065], 0, [.062, .052, .058], NOSE],
-         [SPH, [0, -.15, .085], 0, [.045, .035, .04], NOSET], ...[-1, 1].map(s => [SPH, [s*.022, -.18, .085], [.6, 0, 0], [.013, .008, .009], c('#6a2a22')])], nose, skinM);
-    put([[SPH, [0, -.165, .17], 0, [.075, .035, .045], SKIN], [new THREE.TorusGeometry(.045, .007, 6, 16, Math.PI*.75), [0, -.21, .175], [0, 0, Math.PI*.125], 1, c('#6a2a2a')], [SPH, [0, -.215, .15], 0, [.05, .03, .04], SKIN]], head, skinM);
+    put([[SPH, [0, -.01, .01], 0, [.03, .04, .03], SKIN], [SPH, [0, -.062, .043], [.35, 0, 0], [.048, .08, .05], NOSE], [SPH, [0, -.118, .062], 0, [.058, .048, .054], NOSE],
+         [SPH, [0, -.127, .08], 0, [.042, .032, .038], NOSET], ...[-1, 1].map(s => [SPH, [s*.021, -.155, .08], [.6, 0, 0], [.012, .008, .009], c('#6a2a22')])], nose, skinM);
+    // the mouth, wider than the nose so it shows either side of it: a muzzle, a downturned line with dimpled corners and a
+    // pouting lower lip; it opens (dark inside, top teeth, tongue) to talk, gasp, or chatter when he shivers
+    const MZ = x => .2 - 5*x*x;   // where the muzzle meets the chin, curving back to the cheeks
+    put([[SPH, [0, -.175, .165], 0, [.085, .035, .05], SKIN], [SPH, [0, -.238, .145], 0, [.055, .032, .042], SKIN]], head, skinM);
+    const mouth = grp(head, 0, -.207, 0), LIP = c('#cf7a66'), MDARK = c('#4a1a1e');
+    const frown = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([-1, -.6, -.25, 0, .25, .6, 1].map(k => { const x = k*.078, y = .009*(1 - k*k) - .014*Math.pow(Math.abs(k), 2.5); return new THREE.Vector3(x, y, MZ(x)); })), 24, .0065, 6),
+      new THREE.MeshStandardMaterial({ color: MDARK, roughness: .5 })); mouth.add(frown);
+    const dimples = put([-1, 1].map(s => [SPH, [s*.083, -.016, MZ(.083) - .003], [0, 0, s*.6], [.009, .005, .004], MDARK]), mouth, skinM); put([[SPH, [0, -.017, MZ(0) - .006], 0, [.05, .014, .02], LIP]], mouth, skinM);
+    const open = grp(mouth, 0, -.004, MZ(0) - .01);
+    put([[SPH, [0, 0, 0], 0, [.05, .03, .02], MDARK], [SPH, [0, .018, .01], 0, [.038, .008, .01], c('#fbf6ee')], [SPH, [0, -.016, .008], 0, [.028, .01, .012], c('#d6606e')]], open, skinM);
     // the crown: leaves sprouting from the top of the head, a few twigs
     const crown = grp(head, 0, .2, -.03);
     put([[0, .2, 0, .25], [.17, .11, .05, .18], [-.17, .12, -.04, .19], [.04, .12, -.17, .17], [-.06, .08, .15, .15], [.1, .32, -.04, .15], [-.11, .3, .05, .14], [.2, .24, -.1, .12], [-.2, .22, .1, .11]].map(([x, y, z, r]) =>
@@ -541,7 +551,10 @@
       if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); head.rotation.y = clamp(Math.atan2(v.x, v.z), -.45, .45); } else head.rotation.y = 0;
       const blink = sur < .5 && ((t + 1.1) % 4.1) < .14 ? .1 : 1;
       eyes.forEach(e => e.scale.set(1 + .3*sur, (1 + .4*sur)*blink, 1)); lids.forEach(l => { l.position.y = .043 + .03*sur; l.scale.y = 1 - .7*sur; });
-      brows.forEach((b, i) => { b.position.y = .085 + .03*sur; b.rotation.z = (i ? -1 : 1)*(.12 - .3*sur); });
+      brows.forEach((b, i) => { b.position.y = .078 + .03*sur; b.rotation.z = (i ? -1 : 1)*(.12 - .3*sur); });
+      const talk = (st.talk || 0)*Math.max(0, Math.sin(t*11)*.6 + Math.sin(t*7.3)*.4), chatter = brr*(.45 + .35*Math.sin(t*38)), op = clamp(Math.max(.9*sur, talk, chatter), 0, 1);
+      open.visible = op > .04; open.scale.set(.8 + .3*op, op, 1); frown.visible = dimples.visible = op < .35;
+      mouth.position.y = -.207 - .012*op; mouth.scale.x = 1 - .25*sur;
     } };
   }
 
