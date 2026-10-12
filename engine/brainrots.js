@@ -494,9 +494,11 @@
     const head = grp(body, 0, .97, .02);
     put([[SPH, [0, .02, -.02], 0, [.23, .23, .21], FUR], [SPH, [0, .1, -.06], 0, [.2, .14, .17], FURD],
          ...[...Array(11)].map((_, k) => { const a = -1.25 + k*.25; return [SPH, [Math.sin(a)*.165, .155 + .015*Math.cos(k*1.7), Math.cos(a)*.13 + .02], [0, a, 0], [.045, .032, .038], k%2 ? FUR : FURD]; })], head, furM);
-    put([[SPH, [0, -.03, .1], 0, [.175, .19, .13], SKIN], ...[-1, 1].map(s => [SPH, [s*.075, -.07, .19], 0, [.05, .045, .04], SKIN]), ...[-1, 1].map(s => [SPH, [s*.22, .0, .0], 0, [.028, .045, .025], SKIN])], head, skinM);
-    put([...[...Array(13)].map((_, k) => { const a = Math.PI*(.2 + .6*k/12), r = .14; return [SPH, [Math.cos(a)*r, -.12 - Math.sin(a)*r*.6, .1 + Math.sin(a)*.05], 0, [.03, .034, .028], k%2 ? CREAM : c('#e3d3b4')]; }),
-         ...[-1, 1].map(s => [SPH, [s*.15, -.06, .07], 0, [.03, .05, .035], CREAM])], head, furM);   // a cream beard under the jaw, whiskers at the cheeks
+    // the face is one smooth oval (no bumps): rosy cheeks painted on, not puffed
+    const FZ = (x, y) => .1 + .13*Math.sqrt(Math.max(0, 1 - (x/.175)**2 - ((y + .03)/.19)**2));   // its front surface
+    put([[SPH, [0, -.03, .1], 0, [.175, .19, .13], SKIN], ...[-1, 1].map(s => [SPH, [s*.22, .0, .0], 0, [.028, .045, .025], SKIN])], head, skinM);
+    put([-1, 1].map(s => [SPH, [s*.088, -.075, FZ(.088, -.075) - .003], [0, s*.45, 0], [.042, .028, .006], c('#ee9a80')]), head, skinM);
+    put([[new THREE.TorusGeometry(.135, .04, 12, 36, Math.PI), [0, -.13, .062], [-.5, 0, Math.PI], [1, .8, 1], CREAM]], head, furM);   // a soft cream beard under the jaw
     const eyes = [-1, 1].map(s => eyeball(head, [s*.062, .022, .198], .031, c('#9a6a22'), glossy, s*.25));
     const lids = [-1, 1].map(s => { const g = grp(head, s*.062, .043, .203); put([[SPH, [0, 0, 0], 0, [.037, .018, .024], SKIND]], g, skinM); return g; });
     const brows = [-1, 1].map(s => { const g = grp(head, s*.066, .078, .2); put([[SPH, [0, 0, 0], [0, 0, s*.2], [.05, .017, .025], FURD], [SPH, [s*.03, .006, -.004], [0, 0, s*.5], [.025, .012, .02], FUR]], g, furM); return g; });
@@ -505,13 +507,12 @@
          [SPH, [0, -.127, .08], 0, [.042, .032, .038], NOSET], ...[-1, 1].map(s => [SPH, [s*.021, -.155, .08], [.6, 0, 0], [.012, .008, .009], c('#6a2a22')])], nose, skinM);
     // the mouth, wider than the nose so it shows either side of it: a muzzle, a downturned line with dimpled corners and a
     // pouting lower lip; it opens (dark inside, top teeth, tongue) to talk, gasp, or chatter when he shivers
-    const MZ = x => .2 - 5*x*x;   // where the muzzle meets the chin, curving back to the cheeks
-    put([[SPH, [0, -.175, .165], 0, [.085, .035, .05], SKIN], [SPH, [0, -.238, .145], 0, [.055, .032, .042], SKIN]], head, skinM);
-    const mouth = grp(head, 0, -.207, 0), LIP = c('#cf7a66'), MDARK = c('#4a1a1e');
+    const MZ = x => FZ(x, -.19) + .003;   // the mouth lies on the face, under the nose
+    const mouth = grp(head, 0, -.19, 0), LIP = c('#d88672'), MDARK = c('#4a1a1e');
     const frown = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([-1, -.6, -.25, 0, .25, .6, 1].map(k => { const x = k*.078, y = .009*(1 - k*k) - .014*Math.pow(Math.abs(k), 2.5); return new THREE.Vector3(x, y, MZ(x)); })), 24, .0065, 6),
       new THREE.MeshStandardMaterial({ color: MDARK, roughness: .5 })); mouth.add(frown);
-    const dimples = put([-1, 1].map(s => [SPH, [s*.083, -.016, MZ(.083) - .003], [0, 0, s*.6], [.009, .005, .004], MDARK]), mouth, skinM); put([[SPH, [0, -.017, MZ(0) - .006], 0, [.05, .014, .02], LIP]], mouth, skinM);
-    const open = grp(mouth, 0, -.004, MZ(0) - .01);
+    put([[SPH, [0, -.013, MZ(0) - .003], 0, [.04, .009, .005], LIP]], mouth, skinM);   // a hint of lower lip, flat
+    const open = grp(mouth, 0, -.004, MZ(0) - .008);
     put([[SPH, [0, 0, 0], 0, [.05, .03, .02], MDARK], [SPH, [0, .018, .01], 0, [.038, .008, .01], c('#fbf6ee')], [SPH, [0, -.016, .008], 0, [.028, .01, .012], c('#d6606e')]], open, skinM);
     // the crown: leaves sprouting from the top of the head, a few twigs
     const crown = grp(head, 0, .2, -.03);
@@ -553,8 +554,8 @@
       eyes.forEach(e => e.scale.set(1 + .3*sur, (1 + .4*sur)*blink, 1)); lids.forEach(l => { l.position.y = .043 + .03*sur; l.scale.y = 1 - .7*sur; });
       brows.forEach((b, i) => { b.position.y = .078 + .03*sur; b.rotation.z = (i ? -1 : 1)*(.12 - .3*sur); });
       const talk = (st.talk || 0)*Math.max(0, Math.sin(t*11)*.6 + Math.sin(t*7.3)*.4), chatter = brr*(.45 + .35*Math.sin(t*38)), op = clamp(Math.max(.9*sur, talk, chatter), 0, 1);
-      open.visible = op > .04; open.scale.set(.8 + .3*op, op, 1); frown.visible = dimples.visible = op < .35;
-      mouth.position.y = -.207 - .012*op; mouth.scale.x = 1 - .25*sur;
+      open.visible = op > .04; open.scale.set(.8 + .3*op, op, 1); frown.visible = op < .35;
+      mouth.position.y = -.19 - .008*op; mouth.scale.x = 1 - .25*sur;
     } };
   }
 
