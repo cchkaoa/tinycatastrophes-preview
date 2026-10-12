@@ -3,6 +3,7 @@
 Playable previews (GitHub Pages): https://cchkaoa.github.io/tinycatastrophes-preview/
 
 - [Meet the brainrots](https://cchkaoa.github.io/tinycatastrophes-preview/videos/_series-brainrots/cast.html)
+- [Three new brainrots](https://cchkaoa.github.io/tinycatastrophes-preview/videos/_series-brainrots/cast2.html)
 - [The market square](https://cchkaoa.github.io/tinycatastrophes-preview/videos/_series-brainrots/market.html)
 - [The beach and the harbor](https://cchkaoa.github.io/tinycatastrophes-preview/videos/_series-brainrots/harbor.html)
 

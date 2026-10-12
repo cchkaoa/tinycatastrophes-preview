@@ -10,6 +10,12 @@
                         st {alt (m above y), bank, pitch, chomp, bombs (how many still hang, 0..2), prop (0..1 engine power)}
           'ballerina'   Ballerina Cappuccina: a ballerina whose head is a cappuccino on its saucer, with a face on the cup, ~1.7 m
                         st {speed, dir, arms (0 low .. 1 en haut), spin (radians), pirouette (0..1: on pointe, one leg in passé), jump, surprise}
+          'chimpanzini' Chimpanzini Bananini: a chimpanzee in a banana (peel flaps open at the top), ~1.35 m
+                        st {speed, dir, look, surprise, cheer (arms up, waving), laugh, jump}
+          'patapim'     Brr Brr Patapim: a tree with a proboscis monkey's face, a bush of leaves, branch arms, huge bare feet,
+                        ~1.75 m: st {speed, dir, look, surprise, shiver (the 'brr brr' shake), jump}
+          'sixseven'    67 (also '67'): the numbers 6 and 7 as one creature, an eye in each, blue arms with white hands,
+                        trainers, ~1.6 m: st {speed, dir, look, surprise, sixseven (0..1 the six-seven hands), jump}
      o.height rescales the character (metres; default as above).
    Engine.fx.brainrot.track(keys) -> at(t) = { x, y, z, yaw, speed, moving }   keys [{t | v, x, z, y, yaw}] like fx.people:
      travel between keys at different spots (straight, constant speed), hold between keys at the same spot; facing follows
@@ -386,9 +392,188 @@
     } };
   }
 
+  const SPL = new THREE.SphereGeometry(1, 12, 9), SPX = new THREE.SphereGeometry(1, 8, 6);
+  // eyes that blink and widen: a white, an iris, a pupil, a highlight, on a group facing +z; returns the group
+  function eyeball(parent, p, r, iris, mats, ry = 0){
+    const g = grp(parent, ...p); g.rotation.y = ry;
+    put([[SPH, [0, 0, 0], 0, [r, r*1.08, r*.6], c0('#ffffff')], [SPH, [0, 0, r*.42], 0, [r*.58, r*.62, r*.25], iris], [SPH, [0, 0, r*.56], 0, [r*.32, r*.35, r*.14], c0('#0d0a08')],
+      [SPH, [r*.2, r*.28, r*.62], 0, r*.13, c0('#ffffff')]], g, mats);
+    return g;
+  }
+  let c0 = h => new THREE.Color(h);   // set per character to ctx.col
+
+  // ---------- Chimpanzini Bananini: a chimpanzee in a banana ----------
+  function chimpanzini(ctx, o){
+    const c = ctx.col; c0 = c;
+    const root = new THREE.Group(), body = grp(root, 0, .42, 0), tmp = new THREE.Color();
+    const YEL = c('#f6d23c'), YEL2 = c('#dcb024'), GRN = c('#a9c24a'), TIP = c('#4a3320'), CREAM = c('#f4ebc8'), FUR = c('#4a3226'), FUR2 = c('#6a4a36'), SKIN = c('#d3a787'), SKIND = c('#a8785c'), FOOT = c('#5a4234');
+    const peel = MAT({ roughness: .42 }), fur = MAT({ roughness: .85 }), skinM = MAT({ roughness: .6 }), glossy = MAT({ roughness: .08 }), flapM = MAT({ roughness: .45, side: THREE.DoubleSide });
+    // the banana: lofted up a gentle bow (bulging backwards), a dark stalk end at the bottom, a few sugar spots, ridges
+    const BH = .7, sec = u => { const w = u < .01 ? 0 : .03 + .205*Math.pow(Math.sin(Math.PI/2*Math.min(1, u/.6)), .75) + .012*smooth(.85, 1, u); return { w, ht: w, hb: w, y: .07*Math.sin(Math.PI*u) }; };
+    const bcol = (x, y, z, th, u) => { if (u < .07) return TIP; const spot = smooth(.93, 1, Math.sin(th*7 + u*23)*Math.sin(th*3 - u*31 + 1.7));
+      return tmp.copy(GRN).lerp(YEL, smooth(.07, .3, u)).lerp(TIP, .7*spot).multiplyScalar(.95 + .08*Math.abs(Math.cos(th*2.5))).clone(); };
+    const bg = loft(BH, 0, sec, bcol, 40, 40, 2.0); bg.rotateX(-Math.PI/2); bg.translate(0, -.04, 0);
+    const bm = new THREE.Mesh(bg, peel); bm.castShadow = bm.receiveShadow = true; body.add(bm);
+    const surfB = (u, th, k = 1) => { const s = sec(u); return new THREE.Vector3(k*s.w*Math.sin(th), u*BH - .04, -(s.y + k*s.w*Math.cos(th))); };
+    put([.45, 2.0, 3.6, 5.1].map(th => [new THREE.TubeGeometry(new THREE.CatmullRomCurve3([.12, .3, .5, .7, .9, .985].map(u => surfB(u, th, 1.01))), 24, .006, 5), 0, 0, 1, YEL2]), body, peel);
+    // four peel flaps folding out and down from the open top, yellow outside, cream inside
+    { const pp = [], R0 = sec(1).w, yTop = BH - .04, L = .34, curl = 2.2, k = curl/L;
+      for (let f = 0; f < 4; f++){ const a = Math.PI/4 + f*Math.PI/2 + .15*Math.sin(f*2.3), D = [Math.sin(a), 0, Math.cos(a)], T = [Math.cos(a), 0, -Math.sin(a)];
+        for (const [off, col] of [[0, YEL], [-.009, CREAM]]){
+          const g = new THREE.PlaneGeometry(1, 1, 4, 12), p = g.attributes.position;
+          for (let i = 0; i < p.count; i++){ const v = p.getX(i), s = (p.getY(i) + .5)*L, ph = k*s, out = (1 - Math.cos(ph))/k, up = Math.sin(ph)/k, wd = .2*(1 - .55*Math.pow(s/L, 2));
+            const nx = Math.cos(ph), ny = -Math.sin(ph), o2 = out + nx*off, u2 = up + ny*off;
+            p.setXYZ(i, D[0]*(R0 - .01 + o2) + T[0]*v*wd, yTop + u2, D[2]*(R0 - .01 + o2) + T[2]*v*wd); }
+          g.computeVertexNormals(); pp.push([g, 0, 0, 1, col]); } }
+      put(pp, body, flapM); }
+    // the head: fur, a pale face, a big muzzle, brow ridge, ears, eyes, a grin full of teeth (an 'o' when surprised)
+    const head = grp(body, 0, .8, .02);
+    put([[SPH, [0, .02, -.02], 0, [.18, .18, .17], FUR], [SPH, [0, .14, -.05], 0, [.12, .07, .1], FUR2],
+         ...[-1, 0, 1].map(s => [C(0, .03, 6), [s*.04, .2, -.05], [-.3, 0, s*.4], [1, .1, 1], FUR]),
+         ...[-1, 1].map(s => [SPH, [s*.185, .0, -.01], 0, [.035, .065, .055], FUR])], head, fur);
+    put([[SPH, [0, -.01, .085], 0, [.14, .14, .1], SKIN], [SPH, [0, -.085, .13], 0, [.115, .075, .095], SKIN], [SPH, [0, .055, .125], 0, [.13, .032, .05], SKIND],
+         ...[-1, 1].map(s => [SPH, [s*.2, .0, 0], 0, [.022, .055, .045], SKIN]), ...[-1, 1].map(s => [SPH, [s*.016, -.055, .222], 0, [.01, .007, .006], c('#3a2418')])], head, skinM);
+    const eyes = [-1, 1].map(s => eyeball(head, [s*.052, .022, .168], .03, c('#6a3c22'), glossy, s*.25));
+    const grin = new THREE.Group(); grin.position.set(0, -.115, .2); head.add(grin);
+    put([[SPH, [0, 0, 0], 0, [.075, .035, .025], c('#5a1f22')], [SPH, [0, .014, .006], 0, [.066, .014, .02], c('#ffffff')], [SPH, [0, -.016, .008], 0, [.04, .012, .015], c('#d65a6a')]], grin, skinM);
+    const mouthO = new THREE.Mesh(solid([[SPH, [0, -.115, .205], 0, [.035, .045, .02], c('#4a1a1c')]]), skinM); mouthO.visible = false; head.add(mouthO);
+    // long furry arms out of the banana, leathery hands
+    const arms = [-1, 1].map(s => { const sh = grp(body, s*.225, .5, 0), el = grp(sh, 0, -.27, 0);
+      put([[SPH, [0, 0, 0], 0, .055, FUR], [limb(.28, .055, .045, .01), [0, 0, 0], 0, 1, FUR]], sh, fur);
+      put([[SPH, [0, 0, 0], 0, .045, FUR], [limb(.25, .045, .036, .006), [0, 0, 0], 0, 1, FUR]], el, fur);
+      put([[SPH, [0, -.29, .01], 0, [.04, .055, .03], SKIND], ...[-1.5, -.5, .5, 1.5].map(k => [C(.011, .009, 6), [k*.017, -.355, .012], 0, [1, .07, 1], SKIND]), [SPH, [-s*.035, -.29, .03], 0, [.014, .03, .014], SKIND]], el, skinM);
+      return { sh, el, s }; });
+    // short legs and long chimp feet
+    const legs = [-1, 1].map(s => { const l = leg(body, s*.1, .02, 0, .2, .2, .068, .055, FUR, fur);
+      put([[SPH, [0, -.005, .05], 0, [.068, .035, .13], FOOT], [SPH, [-s*.055, -.01, .12], 0, [.022, .02, .04], FOOT], ...[-1, 0, 1].map(k => [SPH, [s*.012 + k*.026, -.012, .175], 0, [.015, .016, .03], FOOT])], l.an, skinM);
+      return l; });
+    root.scale.setScalar((o.height ?? 1.35)/1.35); ctx.scene.add(root);
+    return { object: root, height: o.height ?? 1.35, update(t, st = {}){
+      const a = clamp((st.speed || 0)/.9, 0, 1.4), dir = st.dir ?? 1, f = st.phase ?? t*6.2832*2.2, sur = st.surprise || 0, cheer = st.cheer || 0, laugh = st.laugh || 0;
+      stepLegs(legs, f, a, dir, [0, Math.PI]);
+      body.position.y = .42 + .035*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .006*Math.sin(t*2.3);
+      body.rotation.z = .05*a*Math.sin(f) + .03*Math.sin(t*1.1); body.rotation.x = .04*a*dir;
+      arms.forEach(({ sh, el, s }, i) => { const swing = .55*a*Math.sin(f + (i ? 0 : Math.PI)), wave = cheer*.35*Math.sin(t*9 + i*1.6);
+        sh.rotation.set(-swing - .15 - 1.0*sur*(1 - cheer), 0, s*(.18 + 2.5*cheer + wave)); el.rotation.x = -.35 - .4*cheer - .5*sur; });
+      head.rotation.set(.12*laugh*Math.abs(Math.sin(t*9)) - .08*sur, 0, .05*Math.sin(t*1.3));
+      if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); head.rotation.y = clamp(Math.atan2(v.x, v.z), -.6, .6); } else head.rotation.y = 0;
+      const blink = sur < .5 && ((t + .3) % 3.3) < .1 ? .1 : 1; eyes.forEach(e => e.scale.set(1 + .25*sur, (1 + .3*sur)*blink, 1));
+      grin.visible = sur < .45; mouthO.visible = !grin.visible; mouthO.scale.setScalar(.7 + .6*sur); grin.scale.set(1, 1 + .8*laugh*Math.abs(Math.sin(t*9)), 1);
+    } };
+  }
+
+  // ---------- Brr Brr Patapim: a tree with a proboscis monkey's face and enormous feet ----------
+  function patapim(ctx, o){
+    const c = ctx.col; c0 = c;
+    const root = new THREE.Group(), body = grp(root, 0, .62, 0), tmp = new THREE.Color();
+    const BARK = c('#7a5236'), BARKD = c('#4f3422'), BARKL = c('#9a6c48'), MOSS = c('#6f9a3a'), LEAF = c('#4f9a3c'), LEAF2 = c('#86c45a'), FACE = c('#e6ad86'), NOSE = c('#e08e74'), GINGER = c('#c9773a'), FEET = c('#f0bfa4'), FEETD = c('#d99e86');
+    const bark = MAT({ roughness: .9 }), leafM = MAT({ roughness: .7 }), skinM = MAT({ roughness: .55 }), glossy = MAT({ roughness: .08 });
+    // the trunk: a lathe with flared roots, bark in vertical grooves, moss patches
+    const TR = u => .27 + .035*Math.pow(1 - u, 3) - .03*u + .012*Math.sin(u*9);
+    const barkCol = (x, y, z) => { const a = Math.atan2(x, z), g = Math.abs(Math.sin(a*7 + 2*Math.sin(y*6) + Math.sin(a*3)*.8)); return tmp.copy(BARKD).lerp(BARK, smooth(.05, .5, g)).lerp(BARKL, smooth(.85, 1, g)*.6).clone(); };
+    put([[lathe(TR, .92, 32, 30), [0, -.05, 0], [-Math.PI/2, 0, 0], 1, barkCol], [SPH, [0, .87, 0], 0, [.24, .08, .24], BARKD], [SPH, [0, -.05, 0], 0, [.3, .06, .3], BARKD]], body, bark);
+    put([[1.9, .2, .1], [-2.2, .45, .12], [2.6, .7, .09], [-1.0, .05, .08]].map(([a, y, r]) => [SPH, [Math.sin(a)*.27, y, Math.cos(a)*.27], [0, a, 0], [r, r*.7, .04], MOSS]), body, leafM);
+    // the face: a pale oval in a ginger ruff, sleepy heavy-lidded eyes, a huge drooping nose, a small mouth under it
+    const face = grp(body, 0, .55, .22);
+    put([[SPH, [0, 0, 0], 0, [.17, .2, .07], FACE], [SPH, [0, .17, -.01], 0, [.13, .05, .05], GINGER]], face, skinM);   // the face and a ginger fringe
+    put([[new THREE.TorusGeometry(.19, .03, 8, 36), [0, 0, -.012], 0, [.92, 1.06, .8], BARKD]], face, bark);   // the hollow in the bark it grows from
+    const eyes = [-1, 1].map(s => eyeball(face, [s*.06, .07, .05], .028, c('#5a3a1a'), glossy, s*.2));
+    const lids = [-1, 1].map(s => { const g = grp(face, s*.06, .085, .055); put([[SPH, [0, 0, 0], 0, [.034, .02, .022], FACE]], g, skinM); return g; });
+    const brows = [-1, 1].map(s => { const g = grp(face, s*.065, .125, .055); put([[SPH, [0, 0, 0], [0, 0, s*.25], [.045, .012, .015], BARKD]], g, bark); return g; });
+    const nose = grp(face, 0, .04, .06);
+    put([[SPH, [0, -.07, .035], [.25, 0, 0], [.055, .11, .06], NOSE], [SPH, [0, -.15, .05], 0, [.06, .045, .055], NOSE], ...[-1, 1].map(s => [SPH, [s*.02, -.175, .085], 0, [.012, .008, .008], c('#7a3a2a')])], nose, skinM);
+    put([[new THREE.TorusGeometry(.06, .007, 6, 16, Math.PI*.7), [0, -.235, .045], [0, 0, Math.PI*.15], 1, c('#6a2a2a')]], face, skinM);   // a grumpy mouth under the nose
+    // the crown: a bush of leaves, a few twigs
+    const crown = grp(body, 0, .9, 0);
+    put([[0, .22, 0, .3], [.2, .12, .08, .22], [-.2, .14, -.05, .23], [.05, .14, -.2, .21], [-.06, .1, .2, .2], [.12, .36, -.06, .18], [-.13, .34, .07, .17]].map(([x, y, z, r]) =>
+      [SPL, [x, y, z], 0, [r, r*.85, r], (xx, yy, zz, nx, ny) => tmp.copy(LEAF).lerp(LEAF2, .5 + .5*ny).clone()]), crown, leafM);
+    put([[C(.012, .025, 6), [.18, .02, .12], [.5, 0, -.7], [1, .25, 1], BARK], [C(.012, .025, 6), [-.2, .04, -.1], [-.4, 0, .8], [1, .25, 1], BARK]], crown, bark);
+    // long branch arms with twig fingers and a few leaves
+    const arms = [-1, 1].map(s => { const sh = grp(body, s*.27, .55, 0), el = grp(sh, 0, -.32, 0);
+      put([[SPH, [0, 0, 0], 0, .05, BARK], [limb(.33, .045, .035, .008), [0, 0, 0], 0, 1, barkCol], [SPX, [s*.04, -.15, .02], [0, 0, s*.6], [.06, .015, .035], LEAF2]], sh, bark);
+      put([[SPH, [0, 0, 0], 0, .038, BARK], [limb(.3, .035, .025, .004), [0, 0, 0], 0, 1, barkCol],
+           ...[-.45, -.15, .15, .45].map(a => [C(.004, .012, 5), [Math.sin(a)*.04, -.34, .01], [0, 0, a], [1, .1, 1], BARKD]), [SPX, [s*.03, -.2, .02], [0, 0, -s*.5], [.05, .012, .03], LEAF]], el, bark);
+      return { sh, el, s }; });
+    // thin legs on enormous bare feet
+    const legs = [-1, 1].map(s => { const l = leg(body, s*.13, .0, 0, .3, .29, .05, .038, BARK, bark);
+      put([[SPH, [0, -.02, .1], 0, [.12, .065, .2], FEET], [SPH, [0, -.03, -.03], 0, [.09, .06, .08], FEET], [SPH, [0, -.07, .1], 0, [.115, .015, .19], FEETD],
+           ...[-2, -1, 0, 1, 2].map(k => [SPH, [k*.042 - s*.01, -.025 + (k === -2*s ? .01 : 0), .29 - Math.abs(k)*.012], 0, k === -2*s ? [.032, .032, .04] : [.022, .022, .028], FEET])], l.an, skinM);
+      return l; });
+    root.scale.setScalar((o.height ?? 1.75)/1.75); ctx.scene.add(root);
+    return { object: root, height: o.height ?? 1.75, update(t, st = {}){
+      const a = clamp((st.speed || 0)/.8, 0, 1.3), dir = st.dir ?? 1, f = st.phase ?? t*6.2832*1.6, sur = st.surprise || 0, brr = st.shiver || 0;
+      stepLegs(legs, f, a*.9, dir, [0, Math.PI]);
+      const stomp = Math.pow(Math.abs(Math.sin(f)), 3);
+      body.position.y = .62 + .05*a*(1 - stomp) + (st.jump || 0) + .006*Math.sin(t*1.7);
+      body.rotation.set(.03*a*dir + brr*.03*Math.sin(t*41), 0, .06*a*Math.sin(f) + brr*.05*Math.sin(t*37));
+      body.position.x = brr*.012*Math.sin(t*53);
+      crown.rotation.set(.04*Math.sin(t*1.3 + 1) + .08*a*Math.sin(f + .6) + brr*.08*Math.sin(t*29), 0, .05*Math.sin(t*1.1) + brr*.1*Math.sin(t*33));
+      arms.forEach(({ sh, el, s }, i) => { const swing = .4*a*Math.sin(f + (i ? 0 : Math.PI)); sh.rotation.set(-swing - .1 - .9*sur, 0, s*(.25 + .4*sur + .15*brr*Math.sin(t*31 + i))); el.rotation.x = -.3 - .3*sur; });
+      nose.rotation.x = .12*Math.sin(t*2.1) + .25*a*Math.sin(f*2) + brr*.2*Math.sin(t*45); nose.rotation.z = .08*Math.sin(t*1.4);
+      if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); face.rotation.y = clamp(Math.atan2(v.x, v.z), -.3, .3); } else face.rotation.y = 0;
+      const blink = sur < .5 && ((t + 1.1) % 4.1) < .14 ? .1 : 1;
+      eyes.forEach(e => e.scale.set(1 + .3*sur, (1 + .4*sur)*blink, 1)); lids.forEach(l => { l.position.y = .085 + .03*sur; l.scale.y = 1 - .6*sur; });
+      brows.forEach((b, i) => { b.position.y = .125 + .035*sur; b.rotation.z = (i ? -1 : 1)*(.15 - .3*sur); });
+    } };
+  }
+
+  // ---------- 67: the numbers six and seven as one creature, one eye in each, doing the six-seven hands ----------
+  function sixseven(ctx, o){
+    const c = ctx.col; c0 = c;
+    const root = new THREE.Group(), body = grp(root, 0, .6, 0), tmp = new THREE.Color();
+    const V1 = c('#9a63f2'), V2 = c('#7444d6'), V3 = c('#b78cfa'), BLUE = c('#5ab0ff'), BLUE2 = c('#2f6fd6'), WHITE = c('#f7f8fa'), GREY = c('#9aa3ad'), SOLE = c('#eef1f4');
+    const numM = MAT({ roughness: .35 }), limbM = MAT({ roughness: .5 }), glossy = MAT({ roughness: .08 });
+    const ncol = (x, y, z, nx, ny, nz) => tmp.copy(V2).lerp(V1, smooth(-.2, .6, nz)).lerp(V3, smooth(.6, 1, ny)*.5).clone();
+    const DEPTH = .26, ex = { depth: DEPTH, bevelEnabled: true, bevelThickness: .06, bevelSize: .055, bevelSegments: 4, curveSegments: 24 };
+    // a thick stroke along a curve, round end caps
+    const stroke = (pts, w) => { const crv = new THREE.CatmullRomCurve3(pts.map(([x, y]) => new THREE.Vector3(x, y, 0))), n = 30, L = [], Rr = [];
+      for (let i = 0; i <= n; i++){ const p = crv.getPoint(i/n), tg = crv.getTangent(i/n); L.push(new THREE.Vector2(p.x - tg.y*w/2, p.y + tg.x*w/2)); Rr.push(new THREE.Vector2(p.x + tg.y*w/2, p.y - tg.x*w/2)); }
+      const s = new THREE.Shape(); s.moveTo(L[0].x, L[0].y); L.slice(1).forEach(v => s.lineTo(v.x, v.y));
+      const e = crv.getPoint(1), te = crv.getTangent(1), ae = Math.atan2(te.y, te.x); s.absarc(e.x, e.y, w/2, ae + Math.PI/2, ae - Math.PI/2, true);
+      Rr.reverse().forEach(v => s.lineTo(v.x, v.y)); const b = crv.getPoint(0), tb = crv.getTangent(0), ab = Math.atan2(tb.y, tb.x); s.absarc(b.x, b.y, w/2, ab - Math.PI/2, ab + Math.PI/2, true);
+      const g = new THREE.ExtrudeGeometry(s, ex); g.translate(0, 0, -DEPTH/2); return g; };
+    const ring = (cx, cy, R, r) => { const s = new THREE.Shape(); s.absarc(cx, cy, R, 0, 2*Math.PI, false); const h = new THREE.Path(); h.absarc(cx, cy, r, 0, 2*Math.PI, true); s.holes.push(h);
+      const g = new THREE.ExtrudeGeometry(s, ex); g.translate(0, 0, -DEPTH/2); return g; };
+    const bar = (x0, y0, x1, y1, r) => { const s = new THREE.Shape(); s.moveTo(x0 + r, y0); s.lineTo(x1 - r, y0); s.quadraticCurveTo(x1, y0, x1, y0 + r); s.lineTo(x1, y1 - r); s.quadraticCurveTo(x1, y1, x1 - r, y1);
+      s.lineTo(x0 + r, y1); s.quadraticCurveTo(x0, y1, x0, y1 - r); s.lineTo(x0, y0 + r); s.quadraticCurveTo(x0, y0, x0 + r, y0); const g = new THREE.ExtrudeGeometry(s, ex); g.translate(0, 0, -DEPTH/2); return g; };
+    // the 6 on the left, the 7 on the right (digit space: bottom at y = 0, about 1 m tall)
+    const six = grp(body, -.31, -.05, 0), seven = grp(body, .31, -.05, 0);
+    put([[ring(0, .29, .29, .12), 0, 0, 1, ncol], [stroke([[-.2, .32], [-.24, .6], [-.13, .86], [.08, .97], [.2, .95]], .21), 0, 0, 1, ncol]], six, numM);
+    put([[bar(-.27, .8, .29, 1.0, .07), 0, 0, 1, ncol], [stroke([[.2, .86], [.11, .55], [.0, .25], [-.06, .1]], .21), 0, 0, 1, ncol]], seven, numM);
+    const FZ = DEPTH/2 + .06;   // front face
+    const eyes = [eyeball(six, [-.12, .76, FZ], .085, c('#3a7be0'), glossy, .2), eyeball(seven, [-.03, .9, FZ], .075, c('#3a7be0'), glossy, -.05)];
+    const smile = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([...Array(9)].map((_, k) => { const a = -Math.PI*(.18 + .64*k/8); return new THREE.Vector3(Math.cos(a)*.205, .29 + Math.sin(a)*.205, FZ + .003); })), 24, .017, 8),
+      new THREE.MeshStandardMaterial({ color: c('#2a1a3a'), roughness: .5 })); six.add(smile);
+    const mouthO = new THREE.Mesh(solid([[SPH, [0, .085, FZ], 0, [.045, .04, .012], c('#2a1a3a')]]), numM); mouthO.visible = false; six.add(mouthO);
+    // blue arms (light upper, dark fore), white mitten hands that turn palm up for the six-seven
+    const arms = [[-1, -.72, .62], [1, .63, .6]].map(([s, x, y]) => { const sh = grp(body, x, y, .04), el = grp(sh, 0, -.25, 0), hand = grp(el, 0, -.25, 0);
+      put([[SPH, [0, 0, 0], 0, .055, BLUE], [limb(.26, .05, .044, .006), [0, 0, 0], 0, 1, BLUE]], sh, limbM);
+      put([[SPH, [0, 0, 0], 0, .046, BLUE2], [limb(.25, .044, .038, .004), [0, 0, 0], 0, 1, BLUE2]], el, limbM);
+      put([[SPH, [0, -.05, 0], 0, [.06, .07, .03], WHITE], [SPH, [-s*.05, -.03, .012], [0, 0, s*.5], [.02, .035, .02], WHITE], [C(.036, .04, 12), [0, .0, 0], 0, [1, .03, 1], c('#d9dde3')]], hand, limbM);
+      return { sh, el, hand, s }; });
+    // legs under each number, chunky grey and white trainers
+    const legs = [[-1, -.3], [1, .24]].map(([s, x]) => { const l = leg(body, x, .02, 0, .26, .26, .055, .045, BLUE, limbM);
+      put([[SPH, [0, -.015, .025], 0, [.075, .06, .13], GREY], [SPH, [0, -.055, .03], 0, [.082, .025, .145], SOLE], [SPH, [0, -.07, .03], 0, [.083, .01, .146], c('#7d8590')],
+           [SPH, [0, .012, .1], [-.4, 0, 0], [.05, .02, .05], WHITE], [new THREE.TorusGeometry(.055, .015, 8, 20), [0, .04, -.01], [Math.PI/2, 0, 0], [1, 1.2, 1], WHITE]], l.an, limbM);
+      return l; });
+    root.scale.setScalar((o.height ?? 1.6)/1.6); ctx.scene.add(root);
+    return { object: root, height: o.height ?? 1.6, update(t, st = {}){
+      const a = clamp((st.speed || 0)/.9, 0, 1.4), dir = st.dir ?? 1, f = st.phase ?? t*6.2832*2.3, sur = st.surprise || 0, ss = st.sixseven || 0, beat = Math.sin(t*9.4);
+      stepLegs(legs, f, a, dir, [0, Math.PI]);
+      body.position.y = .6 + .03*a*Math.abs(Math.sin(f)) + (st.jump || 0) + .015*ss*Math.abs(beat);
+      body.rotation.set(.04*a*dir, 0, .04*a*Math.sin(f) + .05*ss*beat);
+      six.rotation.z = .025*Math.sin(t*1.7) + .04*ss*beat; seven.rotation.z = .025*Math.sin(t*1.7 + 1.5) - .04*ss*beat;
+      arms.forEach(({ sh, el, hand, s }, i) => { const swing = .5*a*Math.sin(f + (i ? 0 : Math.PI)), up = ss*.35*(i ? -beat : beat);
+        sh.rotation.set(-swing - ss*(.55 + up) - .9*sur, -s*.45*ss, s*(.2 + .2*sur + .05*ss)); el.rotation.x = -.25 - ss*1.05 - .4*sur; hand.rotation.set(ss*.2, 0, -s*ss*1.4); });
+      if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); body.rotation.y = clamp(Math.atan2(v.x, v.z), -.3, .3)*.6; }
+      const blink = sur < .5 && ((t + .5) % 2.9) < .1 ? .1 : 1; eyes.forEach((e, i) => e.scale.set(1 + .25*sur, (1 + .3*sur)*(i ? blink : (((t + 1.6) % 3.7) < .1 && sur < .5 ? .1 : 1)), 1));
+      smile.visible = sur < .45; mouthO.visible = !smile.visible; mouthO.scale.setScalar(.7 + .6*sur);
+    } };
+  }
+
   E.fx.brainrot = function(ctx, kind, o = {}){
     if (kind === 'sahur'){ const s = E.fx.sahur(ctx, { height: o.height ?? 1.5 }); s.height = o.height ?? 1.5; return s; }
-    return ({ tralalero, bombardiro, ballerina })[kind](ctx, o);
+    return ({ tralalero, bombardiro, ballerina, chimpanzini, patapim, sixseven, '67': sixseven })[kind](ctx, o);
   };
 
   E.fx.brainrot.track = function(keys){
