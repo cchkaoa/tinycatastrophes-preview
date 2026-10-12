@@ -12,8 +12,9 @@
                         st {speed, dir, arms (0 low .. 1 en haut), spin (radians), pirouette (0..1: on pointe, one leg in passé), jump, surprise}
           'chimpanzini' Chimpanzini Bananini: a chimpanzee in a banana (peel flaps open at the top), ~1.35 m
                         st {speed, dir, look, surprise, cheer (arms up, waving), laugh, jump}
-          'patapim'     Brr Brr Patapim: a tree with a proboscis monkey's face, a bush of leaves, branch arms, huge bare feet,
-                        ~1.75 m: st {speed, dir, look, surprise, shiver (the 'brr brr' shake), jump}
+          'patapim'     Brr Brr Patapim: a trunk of twisted roots (moss, ivy, shelf fungi, a knot hole, mushrooms) with a
+                        proboscis monkey's head (ginger fur, cream beard, the long drooping nose) under a crown of leaves,
+                        thin twig arms, huge bare feet, ~1.95 m: st {speed, dir, look, surprise, shiver ('brr brr'), jump}
           'sixseven'    67 (also '67'): the numbers 6 and 7 as one creature, an eye in each, blue arms with white hands,
                         trainers, ~1.6 m: st {speed, dir, look, surprise, sixseven (0..1 the six-seven hands), jump}
      o.height rescales the character (metres; default as above).
@@ -465,55 +466,82 @@
   // ---------- Brr Brr Patapim: a tree with a proboscis monkey's face and enormous feet ----------
   function patapim(ctx, o){
     const c = ctx.col; c0 = c;
-    const root = new THREE.Group(), body = grp(root, 0, .62, 0), tmp = new THREE.Color();
-    const BARK = c('#7a5236'), BARKD = c('#4f3422'), BARKL = c('#9a6c48'), MOSS = c('#6f9a3a'), LEAF = c('#4f9a3c'), LEAF2 = c('#86c45a'), FACE = c('#e6ad86'), NOSE = c('#e08e74'), GINGER = c('#c9773a'), FEET = c('#f0bfa4'), FEETD = c('#d99e86');
-    const bark = MAT({ roughness: .9 }), leafM = MAT({ roughness: .7 }), skinM = MAT({ roughness: .55 }), glossy = MAT({ roughness: .08 });
-    // the trunk: a lathe with flared roots, bark in vertical grooves, moss patches
-    const TR = u => .27 + .035*Math.pow(1 - u, 3) - .03*u + .012*Math.sin(u*9);
-    const barkCol = (x, y, z) => { const a = Math.atan2(x, z), g = Math.abs(Math.sin(a*7 + 2*Math.sin(y*6) + Math.sin(a*3)*.8)); return tmp.copy(BARKD).lerp(BARK, smooth(.05, .5, g)).lerp(BARKL, smooth(.85, 1, g)*.6).clone(); };
-    put([[lathe(TR, .92, 32, 30), [0, -.05, 0], [-Math.PI/2, 0, 0], 1, barkCol], [SPH, [0, .87, 0], 0, [.24, .08, .24], BARKD], [SPH, [0, -.05, 0], 0, [.3, .06, .3], BARKD]], body, bark);
-    put([[1.9, .2, .1], [-2.2, .45, .12], [2.6, .7, .09], [-1.0, .05, .08]].map(([a, y, r]) => [SPH, [Math.sin(a)*.27, y, Math.cos(a)*.27], [0, a, 0], [r, r*.7, .04], MOSS]), body, leafM);
-    // the face: a pale oval in a ginger ruff, sleepy heavy-lidded eyes, a huge drooping nose, a small mouth under it
-    const face = grp(body, 0, .55, .22);
-    put([[SPH, [0, 0, 0], 0, [.17, .2, .07], FACE], [SPH, [0, .17, -.01], 0, [.13, .05, .05], GINGER]], face, skinM);   // the face and a ginger fringe
-    put([[new THREE.TorusGeometry(.19, .03, 8, 36), [0, 0, -.012], 0, [.92, 1.06, .8], BARKD]], face, bark);   // the hollow in the bark it grows from
-    const eyes = [-1, 1].map(s => eyeball(face, [s*.06, .07, .05], .028, c('#5a3a1a'), glossy, s*.2));
-    const lids = [-1, 1].map(s => { const g = grp(face, s*.06, .085, .055); put([[SPH, [0, 0, 0], 0, [.034, .02, .022], FACE]], g, skinM); return g; });
-    const brows = [-1, 1].map(s => { const g = grp(face, s*.065, .125, .055); put([[SPH, [0, 0, 0], [0, 0, s*.25], [.045, .012, .015], BARKD]], g, bark); return g; });
-    const nose = grp(face, 0, .04, .06);
-    put([[SPH, [0, -.07, .035], [.25, 0, 0], [.055, .11, .06], NOSE], [SPH, [0, -.15, .05], 0, [.06, .045, .055], NOSE], ...[-1, 1].map(s => [SPH, [s*.02, -.175, .085], 0, [.012, .008, .008], c('#7a3a2a')])], nose, skinM);
-    put([[new THREE.TorusGeometry(.06, .007, 6, 16, Math.PI*.7), [0, -.235, .045], [0, 0, Math.PI*.15], 1, c('#6a2a2a')]], face, skinM);   // a grumpy mouth under the nose
-    // the crown: a bush of leaves, a few twigs
-    const crown = grp(body, 0, .9, 0);
-    put([[0, .22, 0, .3], [.2, .12, .08, .22], [-.2, .14, -.05, .23], [.05, .14, -.2, .21], [-.06, .1, .2, .2], [.12, .36, -.06, .18], [-.13, .34, .07, .17]].map(([x, y, z, r]) =>
-      [SPL, [x, y, z], 0, [r, r*.85, r], (xx, yy, zz, nx, ny) => tmp.copy(LEAF).lerp(LEAF2, .5 + .5*ny).clone()]), crown, leafM);
-    put([[C(.012, .025, 6), [.18, .02, .12], [.5, 0, -.7], [1, .25, 1], BARK], [C(.012, .025, 6), [-.2, .04, -.1], [-.4, 0, .8], [1, .25, 1], BARK]], crown, bark);
-    // long branch arms with twig fingers and a few leaves
-    const arms = [-1, 1].map(s => { const sh = grp(body, s*.27, .55, 0), el = grp(sh, 0, -.32, 0);
-      put([[SPH, [0, 0, 0], 0, .05, BARK], [limb(.33, .045, .035, .008), [0, 0, 0], 0, 1, barkCol], [SPX, [s*.04, -.15, .02], [0, 0, s*.6], [.06, .015, .035], LEAF2]], sh, bark);
-      put([[SPH, [0, 0, 0], 0, .038, BARK], [limb(.3, .035, .025, .004), [0, 0, 0], 0, 1, barkCol],
-           ...[-.45, -.15, .15, .45].map(a => [C(.004, .012, 5), [Math.sin(a)*.04, -.34, .01], [0, 0, a], [1, .1, 1], BARKD]), [SPX, [s*.03, -.2, .02], [0, 0, -s*.5], [.05, .012, .03], LEAF]], el, bark);
+    const root = new THREE.Group(), body = grp(root, 0, .6, 0), tmp = new THREE.Color();
+    const BARK = c('#7a5236'), BARKD = c('#4a3020'), BARKL = c('#a27650'), MOSS = c('#6f9a3a'), MOSS2 = c('#93b84a'), LEAF = c('#3f8a32'), LEAF2 = c('#7dbd52'), IVY = c('#3f7a2e');
+    const SKIN = c('#e8a47a'), SKIND = c('#cf845c'), NOSE = c('#e98f78'), NOSET = c('#e2715f'), FUR = c('#b8662c'), FURD = c('#8a4a20'), CREAM = c('#efe2c8'), FEET = c('#f0bfa4'), FEETD = c('#d99e86'), NAIL = c('#f7e3d6');
+    const bark = MAT({ roughness: .92 }), leafM = MAT({ roughness: .7 }), skinM = MAT({ roughness: .55 }), furM = MAT({ roughness: .85 }), glossy = MAT({ roughness: .08 });
+    const barkCol = (x, y, z) => { const g = .5 + .5*Math.sin(y*70 + Math.atan2(x, z)*9 + Math.sin(x*53 + z*47)*1.2); return tmp.copy(BARKD).lerp(BARK, smooth(.05, .5, g)).lerp(BARKL, smooth(.88, 1, g)*.45).clone(); };
+    // twisted roots: n strands spiralling round an axis along -y from 0 to -len, radius r0 -> r1 (a limb, or the trunk)
+    const strands = (len, r0, r1, n, twist, y0 = 0, up = false, off = .48, rad = .62) => [...Array(n)].map((_, i) => {
+      const pts = []; for (let k = 0; k <= 12; k++){ const v = k/12, r = r0 + (r1 - r0)*v, a = 2*Math.PI*i/n + twist*v; pts.push(new THREE.Vector3(Math.cos(a)*r*off, y0 + (up ? 1 : -1)*v*len, Math.sin(a)*r*off)); }
+      return [new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, (r0 + r1)/2*rad, 8), 0, 0, 1, barkCol]; });
+    // the trunk: a core and five twisted strands, narrowing to the neck; a knot hole, moss, shelf fungi, ivy, mushrooms
+    const TR = u => .2 - .075*u + .012*Math.sin(u*11);
+    put([[lathe(TR, .82, 28, 24), [0, -.04, 0], [-Math.PI/2, 0, 0], 1, barkCol], ...strands(.84, .21, .13, 7, 2.6, -.05, true, .86, .3), [SPH, [0, -.03, 0], 0, [.2, .06, .2], BARK]], body, bark);
+    put([[new THREE.TorusGeometry(.04, .014, 8, 18), [.07, .25, .2], [0, .35, 0], [1, 1.3, 1], BARKL], [SPH, [.07, .25, .197], [0, .35, 0], [.035, .05, .02], c('#1e130c')]], body, bark);
+    put([[1.9, .12, .09], [-2.3, .4, .1], [2.7, .58, .07], [-.9, .02, .08], [.5, .66, .06], [-1.5, .7, .07]].flatMap(([a, y, r]) => { const R0 = TR(y/.82) + .045;
+      return [0, 1, 2].map(k => [SPH, [Math.sin(a + k*.12)*R0, y + k*.025, Math.cos(a + k*.12)*R0], [0, a, 0], [r*(1 - k*.25), r*.6, .035], k%2 ? MOSS2 : MOSS]); }), body, leafM);
+    put([[-1.25, .3, .1], [-1.0, .38, .075], [1.4, .5, .08]].map(([a, y, r]) => [new THREE.CylinderGeometry(r, r, .025, 16, 1, false, 0, Math.PI), [Math.sin(a)*(TR(y/.82) + .02), y, Math.cos(a)*(TR(y/.82) + .02)], [0, a + Math.PI/2, 0], 1, (x, yy, z, nx, ny) => ny > .5 ? c('#e0a65a') : c('#f2dfb4')]), body, bark);
+    { const pts = []; for (let k = 0; k <= 40; k++){ const v = k/40, a = v*Math.PI*3.2 + .6, r = TR(v*.75) + .03; pts.push(new THREE.Vector3(Math.sin(a)*r, .02 + v*.62, Math.cos(a)*r)); }
+      const vine = new THREE.CatmullRomCurve3(pts), lv = [[new THREE.TubeGeometry(vine, 80, .009, 6), 0, 0, 1, IVY]];
+      for (let k = 1; k < 14; k++){ const p = vine.getPoint(k/14), tg = vine.getTangent(k/14), side = k%2 ? 1 : -1; lv.push([SPX, [p.x + tg.z*.03*side, p.y + .015, p.z - tg.x*.03*side], [0, Math.atan2(p.x, p.z) + side*.6, side*.5], [.035, .008, .025], k%3 ? LEAF : LEAF2]); }
+      put(lv, body, leafM); }
+    for (const [a, y, s] of [[2.4, .0, 1], [2.75, -.01, .7], [-2.6, .02, .8]]){ const r = TR(0) + .02, x = Math.sin(a)*r, z = Math.cos(a)*r;
+      put([[C(.012*s, .016*s, 8), [x, y + .03*s, z], 0, [1, .06*s, 1], c('#f2e6d0')], [SPH, [x, y + .065*s, z], 0, [.035*s, .02*s, .035*s], c('#d8402f')], ...[0, 1, 2].map(k => [SPH, [x + Math.cos(k*2.1)*.02*s, y + .078*s, z + Math.sin(k*2.1)*.02*s], 0, .005*s, c('#ffffff')])], body, skinM); }
+    // the head on top of the trunk: a proboscis monkey. Ginger fur cap and fringe, a pale face, a heavy brow, small sleepy
+    // eyes, the long drooping nose over a small grumpy mouth, a cream beard round the jaw, little ears
+    const head = grp(body, 0, .97, .02);
+    put([[SPH, [0, .02, -.02], 0, [.23, .23, .21], FUR], [SPH, [0, .1, -.06], 0, [.2, .14, .17], FURD],
+         ...[...Array(11)].map((_, k) => { const a = -1.25 + k*.25; return [SPH, [Math.sin(a)*.165, .155 + .015*Math.cos(k*1.7), Math.cos(a)*.13 + .02], [0, a, 0], [.045, .032, .038], k%2 ? FUR : FURD]; })], head, furM);
+    put([[SPH, [0, -.03, .1], 0, [.175, .19, .13], SKIN], ...[-1, 1].map(s => [SPH, [s*.075, -.07, .19], 0, [.05, .045, .04], SKIN]), ...[-1, 1].map(s => [SPH, [s*.22, .0, .0], 0, [.028, .045, .025], SKIN])], head, skinM);
+    put([...[...Array(13)].map((_, k) => { const a = Math.PI*(.2 + .6*k/12), r = .14; return [SPH, [Math.cos(a)*r, -.12 - Math.sin(a)*r*.6, .1 + Math.sin(a)*.05], 0, [.03, .034, .028], k%2 ? CREAM : c('#e3d3b4')]; }),
+         ...[-1, 1].map(s => [SPH, [s*.15, -.06, .07], 0, [.03, .05, .035], CREAM])], head, furM);   // a cream beard under the jaw, whiskers at the cheeks
+    const eyes = [-1, 1].map(s => eyeball(head, [s*.062, .022, .198], .031, c('#9a6a22'), glossy, s*.25));
+    const lids = [-1, 1].map(s => { const g = grp(head, s*.062, .043, .203); put([[SPH, [0, 0, 0], 0, [.037, .018, .024], SKIND]], g, skinM); return g; });
+    const brows = [-1, 1].map(s => { const g = grp(head, s*.066, .078, .2); put([[SPH, [0, 0, 0], [0, 0, s*.2], [.05, .017, .025], FURD], [SPH, [s*.03, .006, -.004], [0, 0, s*.5], [.025, .012, .02], FUR]], g, furM); return g; });
+    const nose = grp(head, 0, .0, .215);
+    put([[SPH, [0, -.01, .01], 0, [.03, .04, .03], SKIN], [SPH, [0, -.07, .045], [.35, 0, 0], [.05, .09, .052], NOSE], [SPH, [0, -.14, .065], 0, [.062, .052, .058], NOSE],
+         [SPH, [0, -.15, .085], 0, [.045, .035, .04], NOSET], ...[-1, 1].map(s => [SPH, [s*.022, -.18, .085], [.6, 0, 0], [.013, .008, .009], c('#6a2a22')])], nose, skinM);
+    put([[SPH, [0, -.165, .17], 0, [.075, .035, .045], SKIN], [new THREE.TorusGeometry(.045, .007, 6, 16, Math.PI*.75), [0, -.21, .175], [0, 0, Math.PI*.125], 1, c('#6a2a2a')], [SPH, [0, -.215, .15], 0, [.05, .03, .04], SKIN]], head, skinM);
+    // the crown: leaves sprouting from the top of the head, a few twigs
+    const crown = grp(head, 0, .2, -.03);
+    put([[0, .2, 0, .25], [.17, .11, .05, .18], [-.17, .12, -.04, .19], [.04, .12, -.17, .17], [-.06, .08, .15, .15], [.1, .32, -.04, .15], [-.11, .3, .05, .14], [.2, .24, -.1, .12], [-.2, .22, .1, .11]].map(([x, y, z, r]) =>
+      [SPL, [x, y, z], 0, [r, r*.85, r], (xx, yy, zz, nx, ny) => tmp.copy(LEAF).lerp(LEAF2, .5 + .5*ny).multiplyScalar(.9 + .15*Math.sin(xx*40 + zz*31)).clone()]), crown, leafM);
+    { const lv = []; for (let k = 0; k < 26; k++){ const a = k*2.39, h = .05 + (k%5)*.07, r = .2 + .06*Math.sin(k);
+        lv.push([SPX, [Math.cos(a)*r, h + .05, Math.sin(a)*r], [0, -a, -.5 - .3*Math.sin(k*1.7)], [.07, .012, .035], k%3 ? LEAF : LEAF2]); }
+      lv.push([C(.01, .022, 6), [.16, .05, .1], [.5, 0, -.8], [1, .25, 1], BARK], [C(.01, .022, 6), [-.18, .06, -.08], [-.4, 0, .9], [1, .25, 1], BARK], [C(.008, .018, 6), [.02, .42, .02], [.2, 0, .3], [1, .16, 1], BARK]);
+      put(lv, crown, leafM); }
+    // thin twisted arms, knobby elbows, twig fingers, a few leaves
+    const arms = [-1, 1].map(s => { const sh = grp(body, s*.22, .7, 0), el = grp(sh, 0, -.32, 0);
+      put([[SPH, [0, 0, 0], 0, .05, BARK], ...strands(.33, .06, .045, 3, 1.6), [SPX, [s*.04, -.15, .02], [0, 0, s*.6], [.06, .014, .035], LEAF2]], sh, bark);
+      put([[SPH, [0, 0, 0], 0, .042, BARKL], ...strands(.3, .045, .032, 3, -1.4), [SPX, [s*.03, -.2, .02], [0, 0, -s*.5], [.05, .012, .03], LEAF]], el, bark);
+      put([[SPH, [0, -.31, .01], 0, [.04, .035, .03], BARK], ...[-.55, -.2, .15, .5].map(a => [C(.004, .011, 5), [Math.sin(a)*.05, -.355 - Math.cos(a)*.012, .012], [0, 0, a], [1, .11, 1], BARKD]), [C(.004, .011, 5), [-s*.045, -.31, .035], [.6, 0, s*.9], [1, .08, 1], BARKD]], el, bark);
       return { sh, el, s }; });
-    // thin legs on enormous bare feet
-    const legs = [-1, 1].map(s => { const l = leg(body, s*.13, .0, 0, .3, .29, .05, .038, BARK, bark);
-      put([[SPH, [0, -.02, .1], 0, [.12, .065, .2], FEET], [SPH, [0, -.03, -.03], 0, [.09, .06, .08], FEET], [SPH, [0, -.07, .1], 0, [.115, .015, .19], FEETD],
-           ...[-2, -1, 0, 1, 2].map(k => [SPH, [k*.042 - s*.01, -.025 + (k === -2*s ? .01 : 0), .29 - Math.abs(k)*.012], 0, k === -2*s ? [.032, .032, .04] : [.022, .022, .028], FEET])], l.an, skinM);
-      return l; });
-    root.scale.setScalar((o.height ?? 1.75)/1.75); ctx.scene.add(root);
-    return { object: root, height: o.height ?? 1.75, update(t, st = {}){
+    // legs of twisted roots on enormous bare feet with toenails, roots wrapped round the ankles
+    const legs = [-1, 1].map(s => { const hp = grp(body, s*.12, .0, 0), kn = grp(hp, 0, -.3, 0), an = grp(kn, 0, -.29, 0);
+      put([[SPH, [0, 0, 0], 0, .06, BARK], ...strands(.3, .07, .055, 3, 1.8)], hp, bark);
+      put([[SPH, [0, 0, 0], 0, .05, BARKL], ...strands(.29, .055, .045, 3, -1.6)], kn, bark);
+      put([[new THREE.TorusGeometry(.055, .014, 6, 18), [0, .03, -.01], [Math.PI/2 + .2, 0, 0], 1, BARK], [new THREE.TorusGeometry(.05, .012, 6, 18), [0, .07, 0], [Math.PI/2 - .2, 0, 0], 1, BARKL]], an, bark);
+      put([[SPH, [0, -.02, .1], 0, [.12, .065, .2], FEET], [SPH, [0, -.03, -.03], 0, [.09, .06, .08], FEET], [SPH, [0, -.07, .1], 0, [.115, .015, .19], FEETD], [SPH, [0, .02, .02], 0, [.07, .05, .07], FEET],
+           ...[-2, -1, 0, 1, 2].flatMap(k => { const big = k === -2*s, x = k*.042 - s*.01, z = .29 - Math.abs(k)*.014 + (big ? .01 : 0), r = big ? .032 : .022;
+             return [[SPH, [x, -.025 + (big ? .01 : 0), z], 0, [r, r, r*1.25], FEET], [SPH, [x, -.012 + (big ? .012 : 0), z + r*.7], [-.3, 0, 0], [r*.65, r*.25, r*.5], NAIL]]; })], an, skinM);
+      return { hp, kn, an }; });
+    root.scale.setScalar((o.height ?? 1.95)/2.15); ctx.scene.add(root);   // modelled ~2.15 m to the top leaf
+    return { object: root, height: o.height ?? 1.95, update(t, st = {}){
       const a = clamp((st.speed || 0)/.8, 0, 1.3), dir = st.dir ?? 1, f = st.phase ?? t*6.2832*1.6, sur = st.surprise || 0, brr = st.shiver || 0;
       stepLegs(legs, f, a*.9, dir, [0, Math.PI]);
       const stomp = Math.pow(Math.abs(Math.sin(f)), 3);
-      body.position.y = .62 + .05*a*(1 - stomp) + (st.jump || 0) + .006*Math.sin(t*1.7);
+      body.position.y = .6 + .05*a*(1 - stomp) + (st.jump || 0) + .006*Math.sin(t*1.7);
       body.rotation.set(.03*a*dir + brr*.03*Math.sin(t*41), 0, .06*a*Math.sin(f) + brr*.05*Math.sin(t*37));
       body.position.x = brr*.012*Math.sin(t*53);
+      head.rotation.set(-.06*sur + .03*a*Math.sin(f*2) + brr*.06*Math.sin(t*39), 0, .04*Math.sin(t*1.2) + brr*.07*Math.sin(t*35));
       crown.rotation.set(.04*Math.sin(t*1.3 + 1) + .08*a*Math.sin(f + .6) + brr*.08*Math.sin(t*29), 0, .05*Math.sin(t*1.1) + brr*.1*Math.sin(t*33));
       arms.forEach(({ sh, el, s }, i) => { const swing = .4*a*Math.sin(f + (i ? 0 : Math.PI)); sh.rotation.set(-swing - .1 - .9*sur, 0, s*(.25 + .4*sur + .15*brr*Math.sin(t*31 + i))); el.rotation.x = -.3 - .3*sur; });
-      nose.rotation.x = .12*Math.sin(t*2.1) + .25*a*Math.sin(f*2) + brr*.2*Math.sin(t*45); nose.rotation.z = .08*Math.sin(t*1.4);
-      if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); face.rotation.y = clamp(Math.atan2(v.x, v.z), -.3, .3); } else face.rotation.y = 0;
+      nose.rotation.x = .1*Math.sin(t*2.1) + .2*a*Math.sin(f*2) + brr*.2*Math.sin(t*45); nose.rotation.z = .07*Math.sin(t*1.4);
+      if (st.look){ root.updateMatrixWorld(true); const v = body.worldToLocal(_p.copy(st.look)); head.rotation.y = clamp(Math.atan2(v.x, v.z), -.45, .45); } else head.rotation.y = 0;
       const blink = sur < .5 && ((t + 1.1) % 4.1) < .14 ? .1 : 1;
-      eyes.forEach(e => e.scale.set(1 + .3*sur, (1 + .4*sur)*blink, 1)); lids.forEach(l => { l.position.y = .085 + .03*sur; l.scale.y = 1 - .6*sur; });
-      brows.forEach((b, i) => { b.position.y = .125 + .035*sur; b.rotation.z = (i ? -1 : 1)*(.15 - .3*sur); });
+      eyes.forEach(e => e.scale.set(1 + .3*sur, (1 + .4*sur)*blink, 1)); lids.forEach(l => { l.position.y = .043 + .03*sur; l.scale.y = 1 - .7*sur; });
+      brows.forEach((b, i) => { b.position.y = .085 + .03*sur; b.rotation.z = (i ? -1 : 1)*(.12 - .3*sur); });
     } };
   }
 

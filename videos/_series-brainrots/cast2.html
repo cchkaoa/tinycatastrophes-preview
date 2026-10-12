@@ -32,9 +32,9 @@ const CARDS = {
 };
 const person = (x, z, h, w = .45, y = 0, d = w) => [[x - w, y, z], [x + w, y, z], [x, y + h, z], [x, y, z + d], [x, y, z - d], [x - w, y + h*.6, z], [x + w, y + h*.6, z]];
 const CAMS = [
-  G.fit([...person(...SPOT.chimpanzini, 1.35), ...person(...SPOT.patapim, 1.8), ...person(...SPOT.sixseven, 1.6, .8)], { yaw: Math.PI, pitch: -.03, fov: 32, top: .2, bottom: .7 }),
+  G.fit([...person(...SPOT.chimpanzini, 1.35), ...person(...SPOT.patapim, 2.0), ...person(...SPOT.sixseven, 1.6, .8)], { yaw: Math.PI, pitch: -.03, fov: 32, top: .2, bottom: .7 }),
   G.fit(person(...SPOT.chimpanzini, 1.75, .6), { yaw: Math.PI - .15, pitch: -.04, fov: 30 }),
-  G.fit(person(...SPOT.patapim, 1.85, .55), { yaw: Math.PI + .2, pitch: -.03, fov: 30 }),
+  G.fit(person(...SPOT.patapim, 2.0, .55), { yaw: Math.PI + .2, pitch: -.03, fov: 30 }),
   G.fit(person(...SPOT.sixseven, 1.65, .85, 0, .6), { yaw: Math.PI - .25, pitch: -.03, fov: 30 }),
   G.fit([...Object.values(LINE).flatMap(([x, z]) => person(x, z, 1.75, .5)), [HOVER[0] - 1.9, HOVER[1], HOVER[2]], [HOVER[0] + 1.9, HOVER[1], HOVER[2]], [0, HOVER[1] + .7, HOVER[2]]], { yaw: Math.PI, pitch: -.03, fov: 32, top: .2, bottom: .72 }),
 ];
